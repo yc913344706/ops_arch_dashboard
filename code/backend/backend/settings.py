@@ -20,7 +20,7 @@ from lib.log import set_color_logger_level
 import os
 
 from yaml import safe_load
-f2 = open(f"{BASE_DIR}/.{os.environ['OPS_ARCH_DASHBOARD_ENV']}.yaml", 'rb')
+f2 = open(f"{BASE_DIR}/.{os.environ.get('OPS_ARCH_DASHBOARD_ENV', 'dev')}.yaml", 'rb')
 config_data = safe_load(f2.read())
 f2.close()
 
@@ -84,10 +84,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # https://stackoverflow.com/questions/35760943/how-can-i-enable-cors-on-django-rest-framework
     'corsheaders',  # 为解决跨域
+    
+    # REST framework
+    'rest_framework',
 
     'apps.user',
     'apps.perm',
     'apps.audit',
+    'apps.monitor',
 ]
 
 MIDDLEWARE = [

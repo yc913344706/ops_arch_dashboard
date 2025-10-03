@@ -1,0 +1,17 @@
+{
+    "backend": {
+      "api": {}
+    },
+    "frontend": {
+      "routes": [
+        "monitor.dashboard",
+        "monitor.links",
+        "monitor.link",
+        "monitor.nodes",
+        "monitor.alerts",
+        "monitor.settings"
+      ],
+      "resources": []
+    }
+  }
+  

@@ -1,4 +1,64 @@
 {
+  "monitor": {
+    "path": "/monitor",
+    "meta": {
+      "icon": "ep:monitor",
+      "title": "监控中心",
+      "rank": 10
+    },
+    "children": {
+      "dashboard":  {
+        "path": "/monitor/dashboard/index",
+        "name": "MonitorDashboard",
+        "meta": {
+          "title": "监控总览",
+          "showParent": true
+        }
+      },
+      "links": {
+        "path": "/monitor/links/index",
+        "name": "MonitorLinks",
+        "meta": {
+          "title": "链路管理",
+          "showParent": true
+        }
+      },
+      "link": {
+        "path": "/monitor/links/detail",
+        "name": "MonitorLinkDetail",
+        "meta": {
+          "title": "链路详情",
+          "showLink": false
+        }
+      },
+      "nodes": {
+        "path": "/monitor/nodes/index",
+        "name": "MonitorNodes",
+        "meta": {
+          "title": "节点配置",
+          "showParent": true
+        }
+      },
+      "alerts": {
+        "path": "/monitor/alerts/index",
+        "name": "MonitorAlerts",
+        "meta": {
+          "title": "告警中心",
+          "showParent": true
+        }
+      },
+      "settings": {
+        "path": "/monitor/settings/index",
+        "name": "MonitorSettings",
+        "meta": {
+          "title": "系统设置",
+          "showParent": true
+        }
+      }
+    }
+  },
+
+
   "system": {
     "path": "/system",
     "meta": {
