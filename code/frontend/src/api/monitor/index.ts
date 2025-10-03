@@ -4,36 +4,25 @@ import { apiMap } from '@/config/api'
 // API Map 定义
 const monitorApiMap = {
   // 链路相关API
-  getLinks: '/api/v1/monitor/links/',
-  getLink: (id: string) => `/api/v1/monitor/links/${id}/`,
-  createLink: '/api/v1/monitor/links/',
-  updateLink: (id: string) => `/api/v1/monitor/links/${id}/`,
-  deleteLink: (id: string) => `/api/v1/monitor/links/${id}/`,
-  getLinkTopology: (id: string) => `/api/v1/monitor/links/${id}/topology/`,
+  getLinks: '/monitor/links/',
+  getLink: (id: string) => `/monitor/links/${id}/`,
+  createLink: '/monitor/links/',
+  updateLink: (id: string) => `/monitor/links/${id}/`,
+  deleteLink: (id: string) => `/monitor/links/${id}/`,
+  getLinkTopology: (id: string) => `/monitor/links/${id}/topology/`,
   
   // 节点相关API
-  getNodes: '/api/v1/monitor/nodes/',
-  getNode: (id: string) => `/api/v1/monitor/nodes/${id}/`,
-  createNode: '/api/v1/monitor/nodes/',
-  updateNode: (id: string) => `/api/v1/monitor/nodes/${id}/`,
-  deleteNode: (id: string) => `/api/v1/monitor/nodes/${id}/`,
-  getNodeHealth: (id: string) => `/api/v1/monitor/nodes/${id}/health/`,
-  getNodeHealthHistory: (id: string) => `/api/v1/monitor/nodes/${id}/health_history/`,
-  getBatchNodeHealth: '/api/v1/monitor/nodes/batch_health/',
+  getNodes: '/monitor/nodes/',
+  createNode: '/monitor/nodes/',
+  updateNode: (id: string) => `/monitor/nodes/${id}/`,
+  deleteNode: (id: string) => `/monitor/nodes/${id}/`,
+  getNodeHealth: (id: string) => `/monitor/nodes/${id}/health/`,
   
   // 连接相关API
-  getConnections: '/api/v1/monitor/connections/',
-  getConnection: (id: string) => `/api/v1/monitor/connections/${id}/`,
-  createConnection: '/api/v1/monitor/connections/',
-  updateConnection: (id: string) => `/api/v1/monitor/connections/${id}/`,
-  deleteConnection: (id: string) => `/api/v1/monitor/connections/${id}/`,
-  
-  // 探活配置API
-  getProbeConfig: '/api/v1/monitor/probe_config/',
-  updateProbeConfig: '/api/v1/monitor/probe_config/',
-  
-  // 搜索API
-  globalSearch: '/api/v1/monitor/search/',
+  getConnections: '/monitor/connections/',
+  createConnection: '/monitor/connections/',
+  updateConnection: (id: string) => `/monitor/connections/${id}/`,
+  deleteConnection: (id: string) => `/monitor/connections/${id}/`,
 }
 
 // 链路相关API
@@ -62,9 +51,6 @@ export const nodeApi = {
   // 获取节点列表
   getNodes: (params?: any) => http.request('get', monitorApiMap.getNodes, { params }),
   
-  // 获取单个节点
-  getNode: (id: string) => http.request('get', monitorApiMap.getNode(id)),
-  
   // 创建节点
   createNode: (data: any) => http.request('post', monitorApiMap.createNode, { data }),
   
@@ -75,22 +61,13 @@ export const nodeApi = {
   deleteNode: (id: string) => http.request('delete', monitorApiMap.deleteNode(id)),
   
   // 获取节点健康状态
-  getNodeHealth: (id: string) => http.request('get', monitorApiMap.getNodeHealth(id)),
-  
-  // 获取节点健康历史
-  getNodeHealthHistory: (id: string, params?: any) => http.request('get', monitorApiMap.getNodeHealthHistory(id), { params }),
-  
-  // 批量获取节点健康状态
-  batchGetNodeHealth: (data: any) => http.request('post', monitorApiMap.getBatchNodeHealth, { data })
+  getNodeHealth: (id: string) => http.request('get', monitorApiMap.getNodeHealth(id))
 }
 
 // 连接相关API
 export const nodeConnectionApi = {
   // 获取连接列表
   getConnections: (params?: any) => http.request('get', monitorApiMap.getConnections, { params }),
-  
-  // 获取单个连接
-  getConnection: (id: string) => http.request('get', monitorApiMap.getConnection(id)),
   
   // 创建连接
   createConnection: (data: any) => http.request('post', monitorApiMap.createConnection, { data }),
@@ -100,19 +77,4 @@ export const nodeConnectionApi = {
   
   // 删除连接
   deleteConnection: (id: string) => http.request('delete', monitorApiMap.deleteConnection(id))
-}
-
-// 探活配置API
-export const probeConfigApi = {
-  // 获取探活配置
-  getProbeConfig: () => http.request('get', monitorApiMap.getProbeConfig),
-  
-  // 更新探活配置
-  updateProbeConfig: (data: any) => http.request('put', monitorApiMap.updateProbeConfig, { data })
-}
-
-// 搜索API
-export const searchApi = {
-  // 全局搜索
-  globalSearch: (params?: any) => http.request('get', monitorApiMap.globalSearch, { params })
 }

@@ -15,6 +15,14 @@
           "showParent": true
         }
       },
+      "architecture": {
+        "path": "/monitor/links/architecture-editor",
+        "name": "MonitorArchitecture",
+        "meta": {
+          "title": "架构图",
+          "showParent": true
+        }
+      },
       "links": {
         "path": "/monitor/links/index",
         "name": "MonitorLinks",

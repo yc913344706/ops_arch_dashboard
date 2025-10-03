@@ -1,27 +1,18 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 from . import views
 
-router = DefaultRouter()
-router.register(r'links', views.LinkViewSet)
-router.register(r'nodes', views.NodeViewSet)
-router.register(r'connections', views.NodeConnectionViewSet)
-
 urlpatterns = [
-    # 使用路由器的URL
-    path('', include(router.urls)),
-    
-    # 链路拓扑
+    # 架构图相关接口
+    path('links/', views.LinkView.as_view(), name='link-list'),
+    path('links/<uuid:link_uuid>/', views.LinkDetailView.as_view(), name='link-detail'),
     path('links/<uuid:link_uuid>/topology/', views.LinkTopologyView.as_view(), name='link-topology'),
     
-    # 节点健康状态
+    # 节点相关接口
+    path('nodes/', views.NodeView.as_view(), name='node-list'),
+    
+    # 连接相关接口
+    path('connections/', views.NodeConnectionView.as_view(), name='connection-list'),
+    
+    # 节点健康相关接口
     path('nodes/<uuid:node_uuid>/health/', views.NodeHealthView.as_view(), name='node-health'),
-    path('nodes/<uuid:node_uuid>/health_history/', views.NodeHealthHistoryView.as_view(), name='node-health-history'),
-    path('nodes/batch_health/', views.BatchNodeHealthView.as_view(), name='batch-node-health'),
-    
-    # 探活配置
-    path('probe_config/', views.ProbeConfigView.as_view(), name='probe-config'),
-    
-    # 搜索
-    path('search/', views.GlobalSearchView.as_view(), name='global-search'),
 ]

@@ -144,6 +144,7 @@ def check_user_api_permission(user_uuid, check_permission_dict, is_user_name=Fal
         'api_path2': 'GET'
     }
     """
+    color_logger.debug(f"检查用户权限: {user_uuid}, {check_permission_dict}")
     user_api_permission_in_server = get_user_perm_json_all(user_uuid, is_user_name)
     user_api_permission_in_server = user_api_permission_in_server.get('backend', {}).get('api', {})
     # color_logger.debug(f"用户api权限JSON: {user_api_permission_in_server}")

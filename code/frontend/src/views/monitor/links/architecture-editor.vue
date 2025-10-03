@@ -34,47 +34,12 @@
       <el-aside class="node-panel" width="300px">
         <el-tabs v-model="activeTab" type="border-card">
           <el-tab-pane label="节点信息" name="nodeInfo">
-            <el-form :model="selectedNode" label-width="100px" v-if="selectedNode">
-              <el-form-item label="节点名称">
-                <el-input v-model="selectedNode.name" />
-              </el-form-item>
-              
-              <el-form-item label="基础信息">
-                <el-button @click="addBasicInfo" size="small">添加</el-button>
-                <div 
-                  v-for="(info, index) in selectedNode.basic_info_list" 
-                  :key="index"
-                  class="basic-info-item"
-                >
-                  <el-input 
-                    v-model="info.host" 
-                    placeholder="主机" 
-                    size="small"
-                    style="width: 40%; margin-right: 5px;"
-                  />
-                  <el-input 
-                    v-model="info.port" 
-                    placeholder="端口" 
-                    size="small"
-                    style="width: 40%; margin-right: 5px;"
-                  />
-                  <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
-                </div>
-              </el-form-item>
-              
-              <el-form-item>
-                <el-button 
-                  type="primary" 
-                  @click="updateNode"
-                  v-if="hasPerms('monitor:updateNode')"
-                >更新</el-button>
-                <el-button 
-                  type="danger" 
-                  @click="deleteNode"
-                  v-if="hasPerms('monitor:deleteNode')"
-                >删除</el-button>
-              </el-form-item>
-            </el-form>
+            <NodeDetailPanel 
+              :node="selectedNode"
+              v-if="selectedNode"
+              @update="handleNodeUpdate"
+              @delete="handleNodeDelete"
+            />
             <div v-else class="no-selection">请选择一个节点</div>
           </el-tab-pane>
           <el-tab-pane label="连接信息" name="connectionInfo">
@@ -147,13 +112,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
 import { hasPerms } from "@/utils/auth"
 
 // 引入组件
 const TopologyGraph = defineAsyncComponent(() => import('@/components/TopologyGraph.vue'))
+const NodeDetailPanel = defineAsyncComponent(() => import('@/components/NodeDetailPanel.vue'))
 
 // 响应式数据
 const selectedDiagram = ref('')
@@ -293,85 +259,32 @@ const handleNodeCreate = async (position: any) => {
   }
 }
 
-// 添加基础信息
-const addBasicInfo = () => {
-  if (selectedNode.value) {
-    if (!selectedNode.value.basic_info_list) {
-      selectedNode.value.basic_info_list = []
-    }
-    selectedNode.value.basic_info_list.push({ host: '', port: null })
-  }
-}
-
-// 删除基础信息
-const removeBasicInfo = (index: number) => {
-  if (selectedNode.value && selectedNode.value.basic_info_list) {
-    selectedNode.value.basic_info_list.splice(index, 1)
-  }
-}
-
-// 更新节点
-const updateNode = async () => {
-  if (!selectedNode.value || !selectedNode.value.uuid) {
-    ElMessage.error('节点信息不完整')
-    return
+// 处理节点更新
+const handleNodeUpdate = async (updatedNode: any) => {
+  // 更新本地数据
+  const index = topologyData.value.nodes.findIndex(n => n.uuid === updatedNode.uuid)
+  if (index !== -1) {
+    topologyData.value.nodes[index] = { ...updatedNode }
+    topologyData.value.nodes[index].id = updatedNode.uuid
+    topologyData.value.nodes[index].label = updatedNode.name
   }
   
-  try {
-    await nodeApi.updateNode(selectedNode.value.uuid, {
-      name: selectedNode.value.name,
-      basic_info_list: selectedNode.value.basic_info_list || [],
-      link: selectedDiagram.value
-    })
-    
-    // 更新本地数据
-    const index = topologyData.value.nodes.findIndex(n => n.uuid === selectedNode.value.uuid)
-    if (index !== -1) {
-      topologyData.value.nodes[index] = { ...selectedNode.value }
-      topologyData.value.nodes[index].id = selectedNode.value.uuid
-      topologyData.value.nodes[index].label = selectedNode.value.name
-    }
-    
-    ElMessage.success('节点更新成功')
-  } catch (error) {
-    console.error('更新节点失败:', error)
-    ElMessage.error('更新节点失败')
-  }
+  ElMessage.success('节点更新成功')
 }
 
-// 删除节点
-const deleteNode = async () => {
-  if (!selectedNode.value || !selectedNode.value.uuid) {
-    ElMessage.error('节点信息不完整')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm('确定要删除此节点吗？此操作会同时删除相关的连接。', '删除确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    await nodeApi.deleteNode(selectedNode.value.uuid)
-    
-    // 从本地数据中移除
-    topologyData.value.nodes = topologyData.value.nodes.filter(n => n.uuid !== selectedNode.value.uuid)
-    topologyData.value.edges = topologyData.value.edges.filter(
-      e => e.source !== selectedNode.value.uuid && e.target !== selectedNode.value.uuid
-    )
-    topologyData.value.connections = topologyData.value.connections.filter(
-      c => c.from_node !== selectedNode.value.uuid && c.to_node !== selectedNode.value.uuid
-    )
-    
-    selectedNode.value = null
-    ElMessage.success('节点删除成功')
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除节点失败:', error)
-      ElMessage.error('删除节点失败')
-    }
-  }
+// 处理节点删除
+const handleNodeDelete = async (nodeId: string) => {
+  // 从本地数据中移除
+  topologyData.value.nodes = topologyData.value.nodes.filter(n => n.uuid !== nodeId)
+  topologyData.value.edges = topologyData.value.edges.filter(
+    e => e.source !== nodeId && e.target !== nodeId
+  )
+  topologyData.value.connections = topologyData.value.connections.filter(
+    c => c.from_node !== nodeId && c.to_node !== nodeId
+  )
+  
+  selectedNode.value = null
+  ElMessage.success('节点删除成功')
 }
 
 // 获取与当前选中节点相关的连接
@@ -487,12 +400,6 @@ onMounted(() => {
   padding: 20px;
   text-align: center;
   color: #999;
-}
-
-.basic-info-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
 }
 
 .connection-info {

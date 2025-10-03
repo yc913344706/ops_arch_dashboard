@@ -1,100 +1,180 @@
-from django.shortcuts import render
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from django.db.models import Q
-from django.core.exceptions import ObjectDoesNotExist
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.views import View
+from lib.request_tool import pub_get_request_body, pub_success_response, pub_error_response, get_request_param
+from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection
-from .tasks import check_node_health
+from lib.log import color_logger
+from apps.myAuth.token_utils import TokenManager
+from django.db.models import Q
 
 
-class LinkViewSet(ModelViewSet):
-    queryset = Link.objects.all()
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = Link.objects.all()
-        # 搜索
-        search = self.request.query_params.get('search', None)
-        if search:
-            queryset = queryset.filter(
-                Q(name__icontains=search) | Q(description__icontains=search)
-            )
-        # 过滤类型
-        link_type = self.request.query_params.get('link_type', None)
-        if link_type:
-            queryset = queryset.filter(link_type=link_type)
-        # 过滤激活状态
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+class LinkView(View):
+    """架构图相关接口"""
+    
+    def get(self, request):
+        """获取架构图列表"""
+        try:
+            body = pub_get_request_body(request)
             
-        return queryset
-
-    def get_serializer_class(self):
-        from .serializers import LinkSerializer
-        return LinkSerializer
-
-
-class NodeViewSet(ModelViewSet):
-    queryset = Node.objects.all()
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = Node.objects.all()
-        # 按架构图过滤
-        link_id = self.request.query_params.get('link_id', None)
-        if link_id:
-            queryset = queryset.filter(link_id=link_id)
-        # 过滤激活状态
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+            page = int(body.get('page', 1))
+            page_size = int(body.get('page_size', 20))
+            search = body.get('search', '')
+            link_type = body.get('link_type', '')
             
-        return queryset
-
-    def get_serializer_class(self):
-        from .serializers import NodeSerializer
-        return NodeSerializer
-
-
-class NodeConnectionViewSet(ModelViewSet):
-    queryset = NodeConnection.objects.all()
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = NodeConnection.objects.all()
-        # 按架构图过滤
-        link_id = self.request.query_params.get('link_id', None)
-        if link_id:
-            queryset = queryset.filter(link_id=link_id)
-        # 按起始节点过滤
-        from_node_id = self.request.query_params.get('from_node_id', None)
-        if from_node_id:
-            queryset = queryset.filter(from_node_id=from_node_id)
-        # 按目标节点过滤
-        to_node_id = self.request.query_params.get('to_node_id', None)
-        if to_node_id:
-            queryset = queryset.filter(to_node_id=to_node_id)
-        # 过滤激活状态
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+            link_list = Link.objects.all()
             
-        return queryset
+            # 添加搜索功能
+            if search:
+                link_list = link_list.filter(
+                    Q(name__icontains=search) | Q(description__icontains=search)
+                )
+            
+            # 按类型过滤
+            if link_type:
+                link_list = link_list.filter(link_type=link_type)
+            
+            # 分页查询
+            has_next, next_page, page_list, all_num, result = pub_paging_tool(page, link_list, page_size)
+            
+            # 格式化返回数据
+            result_data = []
+            for link in result:
+                result_data.append({
+                    'uuid': str(link.uuid),
+                    'name': link.name,
+                    'description': link.description,
+                    'link_type': link.link_type,
+                    'is_active': link.is_active,
+                    'created_by': {
+                        'uuid': str(link.created_by.uuid) if link.created_by else None,
+                        'username': link.created_by.username if link.created_by else None,
+                        'nickname': link.created_by.nickname if link.created_by else None
+                    } if link.created_by else None,
+                    'create_time': link.create_time.isoformat() if link.create_time else None,
+                    'update_time': link.update_time.isoformat() if link.update_time else None
+                })
+            
+            return pub_success_response({
+                'has_next': has_next,
+                'next_page': next_page,
+                'all_num': all_num,
+                'data': result_data
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取架构图列表失败: {e.args}")
+            return pub_error_response(f"获取架构图列表失败: {e.args}")
+    
+    def post(self, request):
+        """创建架构图"""
+        try:
+            body = pub_get_request_body(request)
+            
+            create_keys = ['name', 'description', 'link_type', 'is_active']
+            create_dict = {key: value for key, value in body.items() if key in create_keys}
+            
+            # 设置默认值
+            create_dict['is_active'] = body.get('is_active', True)
+            
+            # 关联创建者（如果需要）
+            from apps.user.models import User
+            user = User.objects.filter(uuid=user_info.get('uuid')).first()
+            if user:
+                create_dict['created_by'] = user
+            
+            link = Link.objects.create(**create_dict)
+            
+            return pub_success_response({
+                'uuid': str(link.uuid),
+                'name': link.name,
+                'description': link.description,
+                'link_type': link.link_type,
+                'is_active': link.is_active
+            })
+        except Exception as e:
+            color_logger.error(f"创建架构图失败: {e.args}")
+            return pub_error_response(f"创建架构图失败: {e.args}")
+    
+    def put(self, request):
+        """更新架构图"""
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
 
-    def get_serializer_class(self):
-        from .serializers import NodeConnectionSerializer
-        return NodeConnectionSerializer
+            link = Link.objects.filter(uuid=uuid).first()
+            assert link, '更新的架构图不存在'
+
+            update_keys = ['name', 'description', 'link_type', 'is_active']
+            update_dict = {key: value for key, value in body.items() if key in update_keys}
+            
+            for key, value in update_dict.items():
+                setattr(link, key, value)
+            link.save()
+
+            return pub_success_response({
+                'uuid': str(link.uuid),
+                'name': link.name,
+                'description': link.description,
+                'link_type': link.link_type,
+                'is_active': link.is_active
+            })
+        except Exception as e:
+            color_logger.error(f"更新架构图失败: {e.args}")
+            return pub_error_response(f"更新架构图失败: {e.args}")
+    
+    def delete(self, request):
+        """删除架构图"""
+        try:
+            body = pub_get_request_body(request)
+            
+            link = Link.objects.filter(uuid=body['uuid']).first()
+            assert link, '删除的架构图不存在'
+            link.delete()
+            return pub_success_response()
+        except Exception as e:
+            color_logger.error(f"删除架构图失败: {e.args}")
+            return pub_error_response(f"删除架构图失败: {e.args}")
 
 
-class LinkTopologyView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class LinkDetailView(View):
+    """单个架构图详情接口"""
+    
     def get(self, request, link_uuid):
+        """获取单个架构图详情"""
+        try:
+            color_logger.debug(f"获取单个架构图详情: {link_uuid}")
+            link = Link.objects.get(uuid=link_uuid)
+            
+            return pub_success_response({
+                'uuid': str(link.uuid),
+                'name': link.name,
+                'description': link.description,
+                'link_type': link.link_type,
+                'is_active': link.is_active,
+                'create_time': link.create_time.isoformat() if link.create_time else None,
+                'update_time': link.update_time.isoformat() if link.update_time else None
+            })
+        except Link.DoesNotExist:
+            return pub_error_response("架构图不存在")
+        except Exception as e:
+            color_logger.error(f"获取架构图详情失败: {e.args}")
+            return pub_error_response(f"获取架构图详情失败: {e.args}")
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LinkTopologyView(View):
+    """架构图拓扑接口"""
+    
+    def get(self, request, link_uuid):
+        """获取架构图拓扑"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
         try:
             link = Link.objects.get(uuid=link_uuid)
             nodes = Node.objects.filter(link=link, is_active=True)
@@ -110,7 +190,7 @@ class LinkTopologyView(APIView):
                     'is_healthy': node.is_healthy,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
-                    'create_time': node.create_time
+                    'create_time': node.create_time.isoformat() if node.create_time else None
                 })
 
             # 构建连接数据
@@ -123,20 +203,353 @@ class LinkTopologyView(APIView):
                     'direction': conn.direction
                 })
 
-            return Response({
+            return pub_success_response({
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'nodes': nodes_data,
                 'connections': connections_data
             })
         except Link.DoesNotExist:
-            return Response({'error': 'Architecture diagram not found'}, status=status.HTTP_404_NOT_FOUND)
+            return pub_error_response("架构图不存在")
+        except Exception as e:
+            color_logger.error(f"获取架构图拓扑失败: {e.args}")
+            return pub_error_response(f"获取架构图拓扑失败: {e.args}")
 
 
-class NodeHealthView(APIView):
-    permission_classes = [IsAuthenticated]
+@method_decorator(csrf_exempt, name='dispatch')
+class NodeView(View):
+    """节点相关接口"""
+    
+    def get(self, request):
+        """获取节点列表"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
 
+        try:
+            body = pub_get_request_body(request)
+            
+            page = int(body.get('page', 1))
+            page_size = int(body.get('page_size', 20))
+            search = body.get('search', '')
+            link_id = body.get('link_id', '')
+            
+            node_list = Node.objects.all()
+            
+            # 添加搜索功能
+            if search:
+                node_list = node_list.filter(name__icontains=search)
+            
+            # 按架构图过滤
+            if link_id:
+                node_list = node_list.filter(link_id=link_id)
+            
+            # 分页查询
+            has_next, next_page, page_list, all_num, result = pub_paging_tool(page, node_list, page_size)
+            
+            # 格式化返回数据
+            result_data = []
+            for node in result:
+                result_data.append({
+                    'uuid': str(node.uuid),
+                    'name': node.name,
+                    'basic_info_list': node.basic_info_list,
+                    'link': {
+                        'uuid': str(node.link.uuid),
+                        'name': node.link.name
+                    },
+                    'is_active': node.is_active,
+                    'is_healthy': node.is_healthy,
+                    'position_x': node.position_x,
+                    'position_y': node.position_y,
+                    'create_time': node.create_time.isoformat() if node.create_time else None,
+                    'update_time': node.update_time.isoformat() if node.update_time else None
+                })
+            
+            return pub_success_response({
+                'has_next': has_next,
+                'next_page': next_page,
+                'all_num': all_num,
+                'data': result_data
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取节点列表失败: {e.args}")
+            return pub_error_response(f"获取节点列表失败: {e.args}")
+    
+    def post(self, request):
+        """创建节点"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            create_keys = ['name', 'basic_info_list', 'link', 'is_active', 'position_x', 'position_y']
+            create_dict = {key: value for key, value in body.items() if key in create_keys}
+            
+            # 设置默认值
+            create_dict['is_active'] = body.get('is_active', True)
+            create_dict['basic_info_list'] = body.get('basic_info_list', [])
+            
+            # 关联架构图
+            from .models import Link
+            link = Link.objects.filter(uuid=body.get('link')).first()
+            if link:
+                create_dict['link'] = link
+            else:
+                return pub_error_response("架构图不存在")
+            
+            node = Node.objects.create(**create_dict)
+            
+            return pub_success_response({
+                'uuid': str(node.uuid),
+                'name': node.name,
+                'basic_info_list': node.basic_info_list,
+                'link': str(node.link.uuid),
+                'is_active': node.is_active
+            })
+        except Exception as e:
+            color_logger.error(f"创建节点失败: {e.args}")
+            return pub_error_response(f"创建节点失败: {e.args}")
+    
+    def put(self, request):
+        """更新节点"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            node = Node.objects.filter(uuid=uuid).first()
+            assert node, '更新的节点不存在'
+
+            update_keys = ['name', 'basic_info_list', 'is_active', 'position_x', 'position_y']
+            update_dict = {key: value for key, value in body.items() if key in update_keys}
+            
+            # 处理basic_info_list
+            if 'basic_info_list' in body:
+                update_dict['basic_info_list'] = body['basic_info_list']
+            
+            for key, value in update_dict.items():
+                setattr(node, key, value)
+            node.save()
+
+            return pub_success_response({
+                'uuid': str(node.uuid),
+                'name': node.name,
+                'basic_info_list': node.basic_info_list,
+                'is_active': node.is_active
+            })
+        except Exception as e:
+            color_logger.error(f"更新节点失败: {e.args}")
+            return pub_error_response(f"更新节点失败: {e.args}")
+    
+    def delete(self, request):
+        """删除节点"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            node = Node.objects.filter(uuid=body['uuid']).first()
+            assert node, '删除的节点不存在'
+            node.delete()
+            return pub_success_response()
+        except Exception as e:
+            color_logger.error(f"删除节点失败: {e.args}")
+            return pub_error_response(f"删除节点失败: {e.args}")
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class NodeConnectionView(View):
+    """节点连接相关接口"""
+    
+    def get(self, request):
+        """获取连接列表"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            page = int(body.get('page', 1))
+            page_size = int(body.get('page_size', 20))
+            link_id = body.get('link_id', '')
+            from_node_id = body.get('from_node_id', '')
+            to_node_id = body.get('to_node_id', '')
+            
+            connection_list = NodeConnection.objects.all()
+            
+            # 按架构图过滤
+            if link_id:
+                connection_list = connection_list.filter(link_id=link_id)
+            
+            # 按起始节点过滤
+            if from_node_id:
+                connection_list = connection_list.filter(from_node_id=from_node_id)
+            
+            # 按目标节点过滤
+            if to_node_id:
+                connection_list = connection_list.filter(to_node_id=to_node_id)
+            
+            # 分页查询
+            has_next, next_page, page_list, all_num, result = pub_paging_tool(page, connection_list, page_size)
+            
+            # 格式化返回数据
+            result_data = []
+            for conn in result:
+                result_data.append({
+                    'uuid': str(conn.uuid),
+                    'from_node': {
+                        'uuid': str(conn.from_node.uuid),
+                        'name': conn.from_node.name
+                    },
+                    'to_node': {
+                        'uuid': str(conn.to_node.uuid),
+                        'name': conn.to_node.name
+                    },
+                    'direction': conn.direction,
+                    'link': {
+                        'uuid': str(conn.link.uuid),
+                        'name': conn.link.name
+                    },
+                    'is_active': conn.is_active,
+                    'create_time': conn.create_time.isoformat() if conn.create_time else None
+                })
+            
+            return pub_success_response({
+                'has_next': has_next,
+                'next_page': next_page,
+                'all_num': all_num,
+                'data': result_data
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取连接列表失败: {e.args}")
+            return pub_error_response(f"获取连接列表失败: {e.args}")
+    
+    def post(self, request):
+        """创建连接"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            from_node_id = body.get('from_node')
+            to_node_id = body.get('to_node')
+            direction = body.get('direction')
+            link_id = body.get('link')
+            
+            # 验证必填字段
+            assert from_node_id, '起始节点不能为空'
+            assert to_node_id, '目标节点不能为空'
+            assert direction, '方向不能为空'
+            assert link_id, '架构图不能为空'
+            
+            # 验证节点和架构图是否存在
+            from apps.user.models import User
+            from_node = Node.objects.filter(uuid=from_node_id).first()
+            to_node = Node.objects.filter(uuid=to_node_id).first()
+            link = Link.objects.filter(uuid=link_id).first()
+            
+            assert from_node, '起始节点不存在'
+            assert to_node, '目标节点不存在'
+            assert link, '架构图不存在'
+            
+            # 创建连接
+            connection = NodeConnection.objects.create(
+                from_node=from_node,
+                to_node=to_node,
+                direction=direction,
+                link=link
+            )
+            
+            return pub_success_response({
+                'uuid': str(connection.uuid),
+                'from_node': str(connection.from_node.uuid),
+                'to_node': str(connection.to_node.uuid),
+                'direction': connection.direction,
+                'link': str(connection.link.uuid)
+            })
+        except Exception as e:
+            color_logger.error(f"创建连接失败: {e.args}")
+            return pub_error_response(f"创建连接失败: {e.args}")
+    
+    def put(self, request):
+        """更新连接"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            connection = NodeConnection.objects.filter(uuid=uuid).first()
+            assert connection, '更新的连接不存在'
+
+            direction = body.get('direction')
+            if direction:
+                connection.direction = direction
+
+            is_active = body.get('is_active')
+            if is_active is not None:
+                connection.is_active = is_active
+                
+            connection.save()
+
+            return pub_success_response({
+                'uuid': str(connection.uuid),
+                'from_node': str(connection.from_node.uuid),
+                'to_node': str(connection.to_node.uuid),
+                'direction': connection.direction,
+                'is_active': connection.is_active
+            })
+        except Exception as e:
+            color_logger.error(f"更新连接失败: {e.args}")
+            return pub_error_response(f"更新连接失败: {e.args}")
+    
+    def delete(self, request):
+        """删除连接"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
+        try:
+            body = pub_get_request_body(request)
+            
+            connection = NodeConnection.objects.filter(uuid=body['uuid']).first()
+            assert connection, '删除的连接不存在'
+            connection.delete()
+            return pub_success_response()
+        except Exception as e:
+            color_logger.error(f"删除连接失败: {e.args}")
+            return pub_error_response(f"删除连接失败: {e.args}")
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class NodeHealthView(View):
+    """节点健康状态接口"""
+    
     def get(self, request, node_uuid):
+        """获取节点健康状态"""
+        user_info, error = check_auth_token(request)
+        if error:
+            return pub_error_response(401, msg=error)
+
         try:
             node = Node.objects.get(uuid=node_uuid)
             latest_health = node.health_records.first()  # 获取最新健康记录
@@ -147,7 +560,7 @@ class NodeHealthView(APIView):
                     'name': node.name,
                     'is_healthy': latest_health.is_healthy,
                     'response_time': latest_health.response_time,
-                    'last_check_time': latest_health.create_time,
+                    'last_check_time': latest_health.create_time.isoformat() if latest_health.create_time else None,
                     'probe_result': latest_health.probe_result,
                     'error_message': latest_health.error_message
                 }
@@ -158,138 +571,14 @@ class NodeHealthView(APIView):
                     'name': node.name,
                     'is_healthy': node.is_healthy,
                     'response_time': None,
-                    'last_check_time': node.last_check_time,
+                    'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
                     'probe_result': {},
                     'error_message': None
                 }
 
-            return Response(data)
+            return pub_success_response(data)
         except Node.DoesNotExist:
-            return Response({'error': 'Node not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-class NodeHealthHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, node_uuid):
-        try:
-            node = Node.objects.get(uuid=node_uuid)
-            hours = int(request.query_params.get('hours', 24))
-            
-            from datetime import timedelta
-            from django.utils import timezone
-            
-            start_time = timezone.now() - timedelta(hours=hours)
-            health_records = node.health_records.filter(
-                create_time__gte=start_time
-            ).order_by('-create_time')
-            
-            data = []
-            for record in health_records:
-                data.append({
-                    'create_time': record.create_time,
-                    'is_healthy': record.is_healthy,
-                    'response_time': record.response_time,
-                    'probe_result': record.probe_result
-                })
-            
-            return Response(data)
-        except Node.DoesNotExist:
-            return Response({'error': 'Node not found'}, status=status.HTTP_404_NOT_FOUND)
-        except ValueError:
-            return Response({'error': 'Invalid hours parameter'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class BatchNodeHealthView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        node_uuids = request.data.get('node_uuids', [])
-        if not node_uuids:
-            return Response({'error': 'No node UUIDs provided'}, status=status.HTTP_400_BAD_REQUEST)
-
-        nodes = Node.objects.filter(uuid__in=node_uuids)
-        health_data = []
-
-        for node in nodes:
-            latest_health = node.health_records.first()
-            if latest_health:
-                health_data.append({
-                    'node_uuid': str(node.uuid),
-                    'name': node.name,
-                    'is_healthy': latest_health.is_healthy,
-                    'response_time': latest_health.response_time
-                })
-            else:
-                health_data.append({
-                    'node_uuid': str(node.uuid),
-                    'name': node.name,
-                    'is_healthy': node.is_healthy,
-                    'response_time': None
-                })
-
-        return Response(health_data)
-
-
-class ProbeConfigView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        from .probe_config import ProbeConfig
-        config = ProbeConfig.get_default_configs()
-        for key in config:
-            # 尝试从数据库获取配置，如果不存在则使用默认值
-            from .models import AppSetting
-            try:
-                app_setting = AppSetting.objects.get(key=key)
-                config[key] = app_setting.value
-            except AppSetting.DoesNotExist:
-                pass
-                
-        return Response(config)
-
-    def put(self, request):
-        from .probe_config import ProbeConfig
-        for key, value in request.data.items():
-            ProbeConfig.set_config(key, value)
-        return Response({'message': 'Configuration updated successfully'})
-
-
-class GlobalSearchView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        query = request.query_params.get('q', '')
-        search_type = request.query_params.get('type', 'all')  # link, node, all
-
-        if not query:
-            return Response({'results': []})
-
-        results = []
-        
-        if search_type in ['link', 'all']:
-            links = Link.objects.filter(
-                Q(name__icontains=query) | Q(description__icontains=query)
-            )
-            for link in links:
-                results.append({
-                    'type': 'link',
-                    'uuid': str(link.uuid),
-                    'name': link.name,
-                    'description': link.description,
-                    'link_type': link.link_type
-                })
-
-        if search_type in ['node', 'all']:
-            nodes = Node.objects.filter(
-                Q(name__icontains=query)
-            )
-            for node in nodes:
-                results.append({
-                    'type': 'node',
-                    'uuid': str(node.uuid),
-                    'name': node.name,
-                    'link_name': node.link.name
-                })
-
-        return Response({'results': results})
+            return pub_error_response("节点不存在")
+        except Exception as e:
+            color_logger.error(f"获取节点健康状态失败: {e.args}")
+            return pub_error_response(f"获取节点健康状态失败: {e.args}")

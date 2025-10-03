@@ -1,10 +1,13 @@
 {
     "backend": {
-      "api": {}
+      "api": {
+        "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"]
+      }
     },
     "frontend": {
       "routes": [
         "monitor.dashboard",
+        "monitor.architecture",
         "monitor.links",
         "monitor.link",
         "monitor.nodes",

@@ -29,18 +29,6 @@
         <span class="legend-text">{{ status.text }}</span>
       </div>
     </div>
-    
-    <!-- 方向选择弹窗 -->
-    <div 
-      v-if="showDirectionPanel" 
-      class="direction-panel"
-      :style="{ top: directionPanelPos.y + 'px', left: directionPanelPos.x + 'px' }"
-    >
-      <div class="direction-option" @click="selectDirection('up')">上</div>
-      <div class="direction-option" @click="selectDirection('left')">左</div>
-      <div class="direction-option" @click="selectDirection('right')">右</div>
-      <div class="direction-option" @click="selectDirection('down')">下</div>
-    </div>
   </div>
 </template>
 
@@ -65,16 +53,12 @@ const props = defineProps<{
 }>()
 
 // 定义事件
-const emit = defineEmits(['nodeClick', 'nodeCreate', 'connectionCreate'])
+const emit = defineEmits(['nodeClick', 'nodeCreate'])
 
 // 响应式数据
 const graphContainerRef = ref<HTMLElement>()
 let graphInstance: any = null
 const isCreatingNode = ref(false)
-const showDirectionPanel = ref(false)
-const directionPanelPos = ref({ x: 0, y: 0 })
-const tempNodePos = ref({ x: 0, y: 0 })
-const sourceNodeId = ref('') // 创建连接时的源节点ID
 
 // 健康状态定义
 const healthStatuses = [
@@ -154,8 +138,6 @@ const initGraph = async () => {
     },
     layout: {
       type: 'grid', // 使用网格布局更适合架构图
-      rows: Math.ceil(Math.sqrt(props.topologyData.nodes.length || 1)),
-      cols: Math.ceil(Math.sqrt(props.topologyData.nodes.length || 1)),
       preventOverlap: true,
       nodeSize: [80, 40],
     },
@@ -170,13 +152,9 @@ const initGraph = async () => {
   // 监听画布点击事件，用于创建节点
   graphInstance.on('canvas:click', (evt: any) => {
     if (isCreatingNode.value) {
-      // 如果正在创建节点模式，记录点击位置
-      tempNodePos.value = { x: evt.x, y: evt.y }
-      showDirectionPanel.value = true
-      directionPanelPos.value = { 
-        x: evt.canvasX + 10, 
-        y: evt.canvasY + 10 
-      }
+      // 如果正在创建节点模式，触发创建事件
+      emit('nodeCreate', { x: evt.x, y: evt.y })
+      isCreatingNode.value = false  // 重置创建模式
     }
   })
 
@@ -268,18 +246,8 @@ const enableNodeCreation = () => {
   if (props.readOnly) return
   isCreatingNode.value = !isCreatingNode.value
   if (isCreatingNode.value) {
-    // 切换到节点创建模式
-    graphInstance.setMode('default')
+    ElMessage.info('点击画布任意位置创建新节点')
   }
-}
-
-// 选择方向
-const selectDirection = (direction: string) => {
-  showDirectionPanel.value = false
-  isCreatingNode.value = false
-  
-  // 触发节点创建事件
-  emit('nodeCreate', tempNodePos.value, direction, sourceNodeId.value)
 }
 
 // 处理窗口大小变化
@@ -382,35 +350,5 @@ onUnmounted(() => {
 
 .legend-text {
   font-size: 12px;
-}
-
-.direction-panel {
-  position: fixed;
-  background: white;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  width: 80px;
-  height: 80px;
-}
-
-.direction-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.3s;
-}
-
-.direction-option:hover {
-  background-color: #f5f5f5;
-  border-color: #1890ff;
-  color: #1890ff;
 }
 </style>
