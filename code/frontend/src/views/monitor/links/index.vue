@@ -145,6 +145,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi } from '@/api/monitor'
+import { computed } from 'vue'
 
 // 定义响应式数据
 const loading = ref(false)

@@ -14,7 +14,11 @@
           :value="diagram.uuid"
         />
       </el-select>
-      <el-button type="primary" @click="createNewDiagram">新建架构图</el-button>
+      <el-button 
+        type="primary" 
+        @click="showCreateDiagramDialog = true"
+        v-if="hasPerms('monitor:createDiagram')"
+      >新建架构图</el-button>
     </div>
     
     <div class="main-content">
@@ -24,56 +28,151 @@
           :read-only="false"
           @node-click="handleNodeClick"
           @node-create="handleNodeCreate"
-          @connection-create="handleConnectionCreate"
         />
       </div>
       
       <el-aside class="node-panel" width="300px">
         <el-tabs v-model="activeTab" type="border-card">
           <el-tab-pane label="节点信息" name="nodeInfo">
-            <NodeDetailPanel 
-              :node="selectedNode" 
-              v-if="selectedNode"
-              @update="handleNodeUpdate"
-              @delete="handleNodeDelete"
-            />
+            <el-form :model="selectedNode" label-width="100px" v-if="selectedNode">
+              <el-form-item label="节点名称">
+                <el-input v-model="selectedNode.name" />
+              </el-form-item>
+              
+              <el-form-item label="基础信息">
+                <el-button @click="addBasicInfo" size="small">添加</el-button>
+                <div 
+                  v-for="(info, index) in selectedNode.basic_info_list" 
+                  :key="index"
+                  class="basic-info-item"
+                >
+                  <el-input 
+                    v-model="info.host" 
+                    placeholder="主机" 
+                    size="small"
+                    style="width: 40%; margin-right: 5px;"
+                  />
+                  <el-input 
+                    v-model="info.port" 
+                    placeholder="端口" 
+                    size="small"
+                    style="width: 40%; margin-right: 5px;"
+                  />
+                  <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
+                </div>
+              </el-form-item>
+              
+              <el-form-item>
+                <el-button 
+                  type="primary" 
+                  @click="updateNode"
+                  v-if="hasPerms('monitor:updateNode')"
+                >更新</el-button>
+                <el-button 
+                  type="danger" 
+                  @click="deleteNode"
+                  v-if="hasPerms('monitor:deleteNode')"
+                >删除</el-button>
+              </el-form-item>
+            </el-form>
             <div v-else class="no-selection">请选择一个节点</div>
           </el-tab-pane>
           <el-tab-pane label="连接信息" name="connectionInfo">
-            <ConnectionDetailPanel 
-              :connection="selectedConnection"
-              v-if="selectedConnection"
-              @update="handleConnectionUpdate"
-              @delete="handleConnectionDelete"
-            />
-            <div v-else class="no-selection">请选择一个连接</div>
+            <div class="connection-info">
+              <h4>节点连接</h4>
+              <div v-if="selectedNode">
+                <div v-for="conn in nodeConnections" :key="conn.uuid" class="connection-item">
+                  <span>{{ conn.direction }} -> {{ getNodeName(conn.to_node) }}</span>
+                  <el-button size="small" @click="deleteConnection(conn.uuid)">删除</el-button>
+                </div>
+                
+                <el-divider />
+                
+                <h4>添加连接</h4>
+                <el-form :model="newConnection" label-width="80px">
+                  <el-form-item label="方向">
+                    <el-select v-model="newConnection.direction" placeholder="选择方向">
+                      <el-option label="上" value="up" />
+                      <el-option label="下" value="down" />
+                      <el-option label="左" value="left" />
+                      <el-option label="右" value="right" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="目标节点">
+                    <el-select v-model="newConnection.to_node" placeholder="选择节点">
+                      <el-option
+                        v-for="node in topologyData.nodes"
+                        :key="node.uuid"
+                        :label="node.name"
+                        :value="node.uuid"
+                        :disabled="node.uuid === selectedNode.uuid"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button 
+                      type="primary" 
+                      @click="createConnection"
+                      :disabled="!newConnection.direction || !newConnection.to_node"
+                    >创建连接</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <div v-else class="no-selection">请选择一个节点</div>
+            </div>
           </el-tab-pane>
         </el-tabs>
       </el-aside>
     </div>
+    
+    <!-- 创建架构图对话框 -->
+    <el-dialog 
+      v-model="showCreateDiagramDialog" 
+      title="创建架构图" 
+      width="30%"
+    >
+      <el-form :model="newDiagramForm" label-width="80px">
+        <el-form-item label="名称">
+          <el-input v-model="newDiagramForm.name" placeholder="请输入架构图名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showCreateDiagramDialog = false">取消</el-button>
+          <el-button type="primary" @click="createNewDiagram">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
+import { hasPerms } from "@/utils/auth"
 
 // 引入组件
 const TopologyGraph = defineAsyncComponent(() => import('@/components/TopologyGraph.vue'))
-const NodeDetailPanel = defineAsyncComponent(() => import('@/components/NodeDetailPanel.vue'))
-const ConnectionDetailPanel = defineAsyncComponent(() => import('@/components/ConnectionDetailPanel.vue'))
 
 // 响应式数据
 const selectedDiagram = ref('')
 const diagrams = ref<any[]>([])
 const topologyData = ref({
   nodes: [],
-  connections: []  // 注意：现在使用connections而不是edges
+  edges: [],
+  connections: []
 })
-const selectedNode = ref(null)
-const selectedConnection = ref(null)
+const selectedNode = ref<any>(null)
 const activeTab = ref('nodeInfo')
-const canvasRef = ref()
+const showCreateDiagramDialog = ref(false)
+const newDiagramForm = ref({
+  name: ''
+})
+const newConnection = ref({
+  direction: '',
+  to_node: ''
+})
 
 // 获取架构图列表
 const fetchDiagrams = async () => {
@@ -90,6 +189,7 @@ const fetchDiagrams = async () => {
     }
   } catch (error) {
     console.error('获取架构图列表失败:', error)
+    ElMessage.error('获取架构图列表失败')
   }
 }
 
@@ -119,6 +219,7 @@ const loadDiagramData = async (diagramId: string) => {
     }
   } catch (error) {
     console.error('加载架构图数据失败:', error)
+    ElMessage.error('加载架构图数据失败')
   }
 }
 
@@ -129,35 +230,39 @@ const onDiagramChange = async (value: string) => {
 
 // 创建新架构图
 const createNewDiagram = async () => {
+  if (!newDiagramForm.value.name.trim()) {
+    ElMessage.error('请输入架构图名称')
+    return
+  }
+  
   try {
-    // 这里应该弹出对话框获取架构图名称
-    const name = prompt('请输入架构图名称:')
-    if (name) {
-      const response = await linkApi.createLink({
-        name,
-        description: '架构图',
-        link_type: 'architecture'
-      })
-      
-      // 添加到列表并选择
-      diagrams.value.push(response.data)
-      selectedDiagram.value = response.data.uuid
-      topologyData.value = { nodes: [], edges: [], connections: [] }
-    }
+    const response = await linkApi.createLink({
+      name: newDiagramForm.value.name,
+      description: '架构图',
+      link_type: 'architecture'
+    })
+    
+    // 添加到列表并选择
+    diagrams.value.push(response.data)
+    selectedDiagram.value = response.data.uuid
+    topologyData.value = { nodes: [], edges: [], connections: [] }
+    newDiagramForm.value.name = ''
+    showCreateDiagramDialog.value = false
+    ElMessage.success('架构图创建成功')
   } catch (error) {
     console.error('创建架构图失败:', error)
+    ElMessage.error('创建架构图失败')
   }
 }
 
 // 处理节点点击
 const handleNodeClick = (node: any) => {
-  selectedNode.value = node
-  selectedConnection.value = null  // 清除连接选择
+  selectedNode.value = { ...node }  // 创建副本以避免直接修改原数据
   activeTab.value = 'nodeInfo'
 }
 
 // 处理节点创建
-const handleNodeCreate = async (position: any, direction?: string, relatedNodeId?: string) => {
+const handleNodeCreate = async (position: any) => {
   if (!selectedDiagram.value) {
     ElMessage.error('请先选择架构图')
     return
@@ -180,61 +285,119 @@ const handleNodeCreate = async (position: any, direction?: string, relatedNodeId
         label: newNode.name
       })
       
-      // 如果指定了方向和相关节点，创建连接
-      if (direction && relatedNodeId) {
-        await createConnection(relatedNodeId, newNode.uuid, direction)
-      }
+      ElMessage.success('节点创建成功')
     }
   } catch (error) {
     console.error('创建节点失败:', error)
+    ElMessage.error('创建节点失败')
   }
 }
 
-// 处理连接创建
-const handleConnectionCreate = async (sourceId: string, targetId: string, direction: string) => {
-  if (!selectedDiagram.value) {
-    ElMessage.error('请先选择架构图')
+// 添加基础信息
+const addBasicInfo = () => {
+  if (selectedNode.value) {
+    if (!selectedNode.value.basic_info_list) {
+      selectedNode.value.basic_info_list = []
+    }
+    selectedNode.value.basic_info_list.push({ host: '', port: null })
+  }
+}
+
+// 删除基础信息
+const removeBasicInfo = (index: number) => {
+  if (selectedNode.value && selectedNode.value.basic_info_list) {
+    selectedNode.value.basic_info_list.splice(index, 1)
+  }
+}
+
+// 更新节点
+const updateNode = async () => {
+  if (!selectedNode.value || !selectedNode.value.uuid) {
+    ElMessage.error('节点信息不完整')
     return
   }
-
+  
   try {
-    await nodeConnectionApi.createConnection({
-      from_node: sourceId,
-      to_node: targetId,
-      direction,
+    await nodeApi.updateNode(selectedNode.value.uuid, {
+      name: selectedNode.value.name,
+      basic_info_list: selectedNode.value.basic_info_list || [],
       link: selectedDiagram.value
     })
     
     // 更新本地数据
-    topologyData.value.connections.push({
-      from_node: sourceId,
-      to_node: targetId,
-      direction,
-      link: selectedDiagram.value
-    })
+    const index = topologyData.value.nodes.findIndex(n => n.uuid === selectedNode.value.uuid)
+    if (index !== -1) {
+      topologyData.value.nodes[index] = { ...selectedNode.value }
+      topologyData.value.nodes[index].id = selectedNode.value.uuid
+      topologyData.value.nodes[index].label = selectedNode.value.name
+    }
     
-    // 添加到edges以便显示
-    topologyData.value.edges.push({
-      id: `${sourceId}-${targetId}`,
-      source: sourceId,
-      target: targetId,
-      label: direction,
-      direction
-    })
+    ElMessage.success('节点更新成功')
   } catch (error) {
-    console.error('创建连接失败:', error)
+    console.error('更新节点失败:', error)
+    ElMessage.error('更新节点失败')
   }
 }
 
-// 创建连接的辅助函数
-const createConnection = async (sourceId: string, targetId: string, direction: string) => {
-  if (!selectedDiagram.value) return
+// 删除节点
+const deleteNode = async () => {
+  if (!selectedNode.value || !selectedNode.value.uuid) {
+    ElMessage.error('节点信息不完整')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('确定要删除此节点吗？此操作会同时删除相关的连接。', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    
+    await nodeApi.deleteNode(selectedNode.value.uuid)
+    
+    // 从本地数据中移除
+    topologyData.value.nodes = topologyData.value.nodes.filter(n => n.uuid !== selectedNode.value.uuid)
+    topologyData.value.edges = topologyData.value.edges.filter(
+      e => e.source !== selectedNode.value.uuid && e.target !== selectedNode.value.uuid
+    )
+    topologyData.value.connections = topologyData.value.connections.filter(
+      c => c.from_node !== selectedNode.value.uuid && c.to_node !== selectedNode.value.uuid
+    )
+    
+    selectedNode.value = null
+    ElMessage.success('节点删除成功')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除节点失败:', error)
+      ElMessage.error('删除节点失败')
+    }
+  }
+}
+
+// 获取与当前选中节点相关的连接
+const nodeConnections = computed(() => {
+  if (!selectedNode.value || !topologyData.value.connections) return []
+  return topologyData.value.connections.filter(conn => conn.from_node === selectedNode.value.uuid)
+})
+
+// 获取节点名称的辅助函数
+const getNodeName = (nodeId: string) => {
+  const node = topologyData.value.nodes.find(n => n.uuid === nodeId)
+  return node ? node.name : nodeId.substring(0, 8) + '...'
+}
+
+// 创建连接
+const createConnection = async () => {
+  if (!selectedNode.value || !newConnection.value.direction || !newConnection.value.to_node) {
+    ElMessage.error('请填写完整的连接信息')
+    return
+  }
 
   try {
     const response = await nodeConnectionApi.createConnection({
-      from_node: sourceId,
-      to_node: targetId,
-      direction,
+      from_node: selectedNode.value.uuid,
+      to_node: newConnection.value.to_node,
+      direction: newConnection.value.direction,
       link: selectedDiagram.value
     })
     
@@ -242,82 +405,42 @@ const createConnection = async (sourceId: string, targetId: string, direction: s
     topologyData.value.connections.push(response.data)
     topologyData.value.edges.push({
       id: response.data.uuid,
-      source: sourceId,
-      target: targetId,
-      label: direction,
-      direction
+      source: response.data.from_node,
+      target: response.data.to_node,
+      label: response.data.direction,
+      direction: response.data.direction
     })
+    
+    // 重置表单
+    newConnection.value = { direction: '', to_node: '' }
+    ElMessage.success('连接创建成功')
   } catch (error) {
     console.error('创建连接失败:', error)
+    ElMessage.error('创建连接失败')
   }
 }
 
-// 处理节点更新
-const handleNodeUpdate = async (nodeData: any) => {
+// 删除连接
+const deleteConnection = async (connectionId: string) => {
   try {
-    await nodeApi.updateNode(nodeData.uuid, nodeData)
+    await ElMessageBox.confirm('确定要删除此连接吗？', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
     
-    // 更新本地数据
-    const index = topologyData.value.nodes.findIndex(n => n.uuid === nodeData.uuid)
-    if (index !== -1) {
-      topologyData.value.nodes[index] = { ...topologyData.value.nodes[index], ...nodeData }
-    }
-  } catch (error) {
-    console.error('更新节点失败:', error)
-  }
-}
-
-// 处理节点删除
-const handleNodeDelete = async (nodeId: string) => {
-  try {
-    await nodeApi.deleteNode(nodeId)
-    
-    // 从本地数据中移除
-    topologyData.value.nodes = topologyData.value.nodes.filter(n => n.uuid !== nodeId)
-    topologyData.value.edges = topologyData.value.edges.filter(
-      e => e.source !== nodeId && e.target !== nodeId
-    )
-    
-    selectedNode.value = null
-  } catch (error) {
-    console.error('删除节点失败:', error)
-  }
-}
-
-// 处理连接更新
-const handleConnectionUpdate = async (connectionData: any) => {
-  try {
-    await nodeConnectionApi.updateConnection(connectionData.uuid, connectionData)
-    
-    // 更新本地数据
-    const index = topologyData.value.connections.findIndex(c => c.uuid === connectionData.uuid)
-    if (index !== -1) {
-      topologyData.value.connections[index] = { ...topologyData.value.connections[index], ...connectionData }
-    }
-    
-    // 更新edges以便显示
-    const edgeIndex = topologyData.value.edges.findIndex(e => e.id === connectionData.uuid)
-    if (edgeIndex !== -1) {
-      topologyData.value.edges[edgeIndex].label = connectionData.direction
-      topologyData.value.edges[edgeIndex].direction = connectionData.direction
-    }
-  } catch (error) {
-    console.error('更新连接失败:', error)
-  }
-}
-
-// 处理连接删除
-const handleConnectionDelete = async (connectionId: string) => {
-  try {
     await nodeConnectionApi.deleteConnection(connectionId)
     
     // 从本地数据中移除
     topologyData.value.connections = topologyData.value.connections.filter(c => c.uuid !== connectionId)
     topologyData.value.edges = topologyData.value.edges.filter(e => e.id !== connectionId)
     
-    selectedConnection.value = null
+    ElMessage.success('连接删除成功')
   } catch (error) {
-    console.error('删除连接失败:', error)
+    if (error !== 'cancel') {
+      console.error('删除连接失败:', error)
+      ElMessage.error('删除连接失败')
+    }
   }
 }
 
@@ -364,5 +487,27 @@ onMounted(() => {
   padding: 20px;
   text-align: center;
   color: #999;
+}
+
+.basic-info-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.connection-info {
+  padding: 10px;
+}
+
+.connection-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.dialog-footer {
+  text-align: right;
 }
 </style>
