@@ -71,6 +71,7 @@ class LinkView(View):
         """创建架构图"""
         try:
             body = pub_get_request_body(request)
+            user_name = request.user_name
             
             create_keys = ['name', 'description', 'link_type', 'is_active']
             create_dict = {key: value for key, value in body.items() if key in create_keys}
@@ -80,7 +81,7 @@ class LinkView(View):
             
             # 关联创建者（如果需要）
             from apps.user.models import User
-            user = User.objects.filter(uuid=user_info.get('uuid')).first()
+            user = User.objects.filter(username=user_name).first()
             if user:
                 create_dict['created_by'] = user
             

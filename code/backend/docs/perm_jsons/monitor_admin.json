@@ -14,7 +14,9 @@
         "monitor.alerts",
         "monitor.settings"
       ],
-      "resources": []
+      "resources": [
+        "monitor:createDiagram"
+      ]
     }
   }
   
