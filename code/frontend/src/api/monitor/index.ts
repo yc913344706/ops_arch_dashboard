@@ -43,7 +43,7 @@ export const linkApi = {
   deleteLink: (id: string) => http.request('delete', monitorApiMap.deleteLink(id)),
   
   // 获取链路拓扑
-  getLinkTopology: (id: string, params: any) => http.request('get', monitorApiMap.getLinkTopology, { params })
+  getLinkTopology: (params: any) => http.request('get', monitorApiMap.getLinkTopology, { params })
 }
 
 // 节点相关API

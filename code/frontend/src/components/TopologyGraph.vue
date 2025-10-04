@@ -7,6 +7,9 @@
       <el-button @click="zoomOut" title="缩小">
         <el-icon><ZoomOut /></el-icon>
       </el-button>
+      <el-button @click="fitView" title="适应视图">
+        <el-icon><FullScreen /></el-icon>
+      </el-button>
       <el-button @click="refreshData" title="刷新">
         <el-icon><Refresh /></el-icon>
       </el-button>
@@ -32,8 +35,6 @@
         }"
         :class="{ 'healthy': node.is_healthy, 'unhealthy': !node.is_healthy, 'selected': isSelected(node) }"
         @click.stop="handleNodeClick(node)"
-        @mousedown="startDrag(node, $event)"
-        @dblclick="handleNodeDoubleClick(node)"
       >
         <div class="node-header">{{ node.name }}</div>
         <div class="node-info">
@@ -66,6 +67,7 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { 
   ZoomIn, 
   ZoomOut, 
+  FullScreen,
   Refresh
 } from '@element-plus/icons-vue'
 
@@ -75,21 +77,18 @@ const props = defineProps<{
     nodes: Array<any>,
     edges: Array<any>
   },
-  readOnly?: boolean
+  readOnly?: boolean,
+  selectedNode?: any
 }>()
 
 // 定义事件
-const emit = defineEmits(['nodeClick', 'nodeCreate', 'nodeMove'])
+const emit = defineEmits(['nodeClick'])
 
 // 响应式数据
 const canvasRef = ref<HTMLElement>()
-const selectedNode = ref<any>(null)
 const scale = ref(1)
 const translateX = ref(0)
 const translateY = ref(0)
-const isDragging = ref(false)
-const dragStartPos = ref({ x: 0, y: 0 })
-const currentNode = ref<any>(null)
 
 // 健康状态定义
 const healthStatuses = [
@@ -98,6 +97,12 @@ const healthStatuses = [
   { code: 'error', text: '错误', color: '#ff4d4f' },
   { code: 'unknown', text: '未知', color: '#bfbfbf' }
 ]
+
+// 初始化图表
+const initGraph = () => {
+  // 设置初始缩放以适应所有节点
+  fitView()
+}
 
 // 获取节点位置
 const getNodePosition = (nodeId: string) => {
@@ -115,91 +120,21 @@ const getNodeBorderColor = (isHealthy: boolean) => {
 
 // 检查节点是否被选中
 const isSelected = (node: any) => {
-  return selectedNode.value && (selectedNode.value.uuid === node.uuid || selectedNode.value.id === node.id)
+  return props.selectedNode && (props.selectedNode.uuid === node.uuid || props.selectedNode.id === node.id)
 }
 
 // 处理节点点击
 const handleNodeClick = (node: any) => {
-  selectedNode.value = node
   emit('nodeClick', node)
-}
-
-// 开始拖动节点
-const startDrag = (node: any, event: MouseEvent) => {
-  if (props.readOnly) return
-  
-  isDragging.value = true
-  currentNode.value = node
-  dragStartPos.value = {
-    x: event.clientX - (node.position_x || 0),
-    y: event.clientY - (node.position_y || 0)
-  }
-  
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', stopDrag)
-  
-  event.preventDefault()
-}
-
-// 拖动节点
-const onDrag = (event: MouseEvent) => {
-  if (!isDragging.value || !currentNode.value) return
-  
-  const canvasRect = canvasRef.value?.getBoundingClientRect()
-  if (!canvasRect) return
-  
-  // 计算相对于画布的实际位置
-  const actualX = (event.clientX - canvasRect.left) / scale.value
-  const actualY = (event.clientY - canvasRect.top) / scale.value
-  
-  // 更新节点位置
-  currentNode.value.position_x = actualX
-  currentNode.value.position_y = actualY
-  
-  // 发出移动事件以便父组件更新
-  emit('nodeMove', {
-    node: currentNode.value,
-    x: actualX,
-    y: actualY
-  })
-}
-
-// 停止拖动
-const stopDrag = () => {
-  isDragging.value = false
-  currentNode.value = null
-  
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', stopDrag)
-}
-
-// 处理节点双击
-const handleNodeDoubleClick = (node: any) => {
-  // 可能用于编辑节点
 }
 
 // 处理画布点击
 const handleCanvasClick = (event: MouseEvent) => {
   // 如果点击的是空白区域，取消选择
   if (event.target === canvasRef.value) {
-    selectedNode.value = null
-    // 触发新节点创建事件
-    const canvasRect = canvasRef.value?.getBoundingClientRect()
-    if (canvasRect) {
-      const actualX = (event.clientX - canvasRect.left) / scale.value
-      const actualY = (event.clientY - canvasRect.top) / scale.value
-      emit('nodeCreate', { x: actualX, y: actualY })
-    }
+    emit('nodeClick', null)
   }
 }
-
-// 监听只读模式变化
-watch(() => props.readOnly, (newVal) => {
-  if (newVal) {
-    // 如果变为只读，确保停止任何拖动
-    stopDrag()
-  }
-})
 
 // 放大
 const zoomIn = () => {
@@ -213,6 +148,52 @@ const zoomOut = () => {
   applyTransform()
 }
 
+// 适应视图
+const fitView = () => {
+  if (!canvasRef.value || !props.topologyData.nodes.length) return
+  
+  // 计算所有节点的边界
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  
+  props.topologyData.nodes.forEach(node => {
+    const x = node.position_x || 0
+    const y = node.position_y || 0
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y)
+  })
+  
+  // 添加一些边距
+  const padding = 50
+  minX -= padding
+  maxX += padding
+  minY -= padding
+  maxY += padding
+  
+  // 计算画布尺寸
+  const canvasWidth = canvasRef.value.clientWidth
+  const canvasHeight = canvasRef.value.clientHeight
+  const contentWidth = maxX - minX
+  const contentHeight = maxY - minY
+  
+  // 计算合适的缩放比例
+  const scaleX = canvasWidth / contentWidth
+  const scaleY = canvasHeight / contentHeight
+  scale.value = Math.min(scaleX, scaleY, 1) // 不要放大超过1
+  
+  // 计算平移量使内容居中
+  const contentCenterX = (minX + maxX) / 2
+  const contentCenterY = (minY + maxY) / 2
+  const canvasCenterX = canvasWidth / 2
+  const canvasCenterY = canvasHeight / 2
+  
+  translateX.value = canvasCenterX - contentCenterX * scale.value
+  translateY.value = canvasCenterY - contentCenterY * scale.value
+  
+  applyTransform()
+}
+
 // 应用缩放和转换
 const applyTransform = () => {
   if (canvasRef.value) {
@@ -222,22 +203,27 @@ const applyTransform = () => {
 
 // 刷新数据
 const refreshData = () => {
-  // 触发重新渲染
+  // 重新适应视图
+  fitView()
 }
 
 // 监听数据变化
 watch(() => props.topologyData, () => {
-  // 数据更新时重新渲染
+  // 数据更新时重新适应视图
+  nextTick(() => {
+    fitView()
+  })
 }, { deep: true })
 
 // 组件挂载
 onMounted(() => {
   // 初始化
+  initGraph()
 })
 
-// 组件卸载时清理事件监听器
+// 组件卸载
 onUnmounted(() => {
-  stopDrag()
+  // 清理工作
 })
 </script>
 
@@ -305,6 +291,7 @@ onUnmounted(() => {
   background-image: 
     radial-gradient(circle, #d3d3d3 1px, transparent 1px);
   background-size: 20px 20px;
+  transform-origin: 0 0;
 }
 
 .node-item {
