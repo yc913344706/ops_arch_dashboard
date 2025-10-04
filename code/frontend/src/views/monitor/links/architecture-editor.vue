@@ -241,7 +241,9 @@ const handleNodeCreate = async (position: any) => {
       const newNode = await nodeApi.createNode({
         name,
         basic_info_list: [],
-        link: selectedDiagram.value
+        link: selectedDiagram.value,
+        position_x: position.x,
+        position_y: position.y
       })
       
       // 更新本地数据

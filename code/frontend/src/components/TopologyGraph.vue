@@ -1,6 +1,5 @@
 <template>
   <div class="topology-graph">
-    <div class="graph-container" ref="graphContainerRef"></div>
     <div class="graph-controls">
       <el-button @click="zoomIn" title="放大">
         <el-icon><ZoomIn /></el-icon>
@@ -8,18 +7,8 @@
       <el-button @click="zoomOut" title="缩小">
         <el-icon><ZoomOut /></el-icon>
       </el-button>
-      <el-button @click="fitView" title="适应视图">
-        <el-icon><FullScreen /></el-icon>
-      </el-button>
       <el-button @click="refreshData" title="刷新">
         <el-icon><Refresh /></el-icon>
-      </el-button>
-      <el-button 
-        v-if="!readOnly" 
-        @click="enableNodeCreation" 
-        :type="isCreatingNode ? 'primary' : 'default'"
-        title="创建节点">
-        <el-icon><Plus /></el-icon>
       </el-button>
     </div>
     <div class="legend-panel">
@@ -29,19 +18,55 @@
         <span class="legend-text">{{ status.text }}</span>
       </div>
     </div>
+    
+    <div class="topology-canvas" ref="canvasRef" @click="handleCanvasClick">
+      <!-- 渲染节点 -->
+      <div 
+        v-for="node in topologyData.nodes"
+        :key="node.uuid || node.id"
+        class="node-item"
+        :style="{ 
+          left: (node.position_x || 0) + 'px', 
+          top: (node.position_y || 0) + 'px',
+          border: `2px solid ${getNodeBorderColor(node.is_healthy)}`
+        }"
+        :class="{ 'healthy': node.is_healthy, 'unhealthy': !node.is_healthy, 'selected': isSelected(node) }"
+        @click.stop="handleNodeClick(node)"
+        @dblclick="handleNodeDoubleClick(node)"
+      >
+        <div class="node-header">{{ node.name }}</div>
+        <div class="node-info">
+          <div v-for="(info, index) in node.basic_info_list" :key="index" class="node-basic-info">
+            <span v-if="info.host">{{ info.host }}</span>
+            <span v-if="info.port" class="port">:{{ info.port }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 渲染连接线 -->
+      <svg class="connections-svg" :style="{ width: '100%', height: '100%' }">
+        <line 
+          v-for="edge in topologyData.edges" 
+          :key="edge.id" 
+          :x1="getNodePosition(edge.source).x" 
+          :y1="getNodePosition(edge.source).y" 
+          :x2="getNodePosition(edge.target).x" 
+          :y2="getNodePosition(edge.target).y" 
+          stroke="#999" 
+          stroke-width="2"
+        />
+      </svg>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { 
   ZoomIn, 
   ZoomOut, 
-  FullScreen, 
-  Refresh,
-  Plus
+  Refresh
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 
 // 定义组件属性
 const props = defineProps<{
@@ -56,9 +81,11 @@ const props = defineProps<{
 const emit = defineEmits(['nodeClick', 'nodeCreate'])
 
 // 响应式数据
-const graphContainerRef = ref<HTMLElement>()
-let graphInstance: any = null
-const isCreatingNode = ref(false)
+const canvasRef = ref<HTMLElement>()
+const selectedNode = ref<any>(null)
+const scale = ref(1)
+const translateX = ref(0)
+const translateY = ref(0)
 
 // 健康状态定义
 const healthStatuses = [
@@ -68,253 +95,76 @@ const healthStatuses = [
   { code: 'unknown', text: '未知', color: '#bfbfbf' }
 ]
 
-// 初始化图表
-const initGraph = async () => {
-  if (!graphContainerRef.value) return
-  
-  // 等待DOM更新
-  await nextTick()
-  
-  // 获取容器尺寸
-  const container = graphContainerRef.value
-  const width = container.clientWidth
-  const height = container.clientHeight
-  
-  // 动态导入G6
-  const G6Module = await import('@antv/g6')
-  const G6 = G6Module?.default || G6Module
-  
-  // 创建G6图实例
-  graphInstance = new G6.Graph({
-    container: container,
-    width,
-    height,
-    modes: {
-      default: props.readOnly 
-        ? ['zoom-canvas', 'drag-canvas', 'drag-node'] 
-        : ['zoom-canvas', 'drag-canvas', 'drag-node', 'click-select']
-    },
-    defaultNode: {
-      type: 'rect',  // 使用矩形节点更适合架构图
-      size: [80, 40],
-      style: {
-        lineWidth: 2,
-        fill: '#fff',
-        radius: 4
-      },
-      labelCfg: {
-        style: {
-          fill: '#333',
-          fontSize: 12,
-        },
-      },
-    },
-    defaultEdge: {
-      type: 'polyline',
-      style: {
-        radius: 10,
-        offset: 20,
-        endArrow: true,
-        lineWidth: 2,
-        stroke: '#999',
-      },
-      labelCfg: {
-        autoRotate: true,
-        style: {
-          fontSize: 10,
-          fill: '#666',
-          background: {
-            fill: '#fff',
-            stroke: '#666',
-            padding: [2, 4],
-            radius: 2,
-          },
-        },
-      },
-    },
-    nodeStateStyles: {
-      hover: {
-        fillOpacity: 0.8,
-      },
-      selected: {
-        lineWidth: 3,
-      },
-    },
-    layout: {
-      type: 'grid', // 使用网格布局更适合架构图
-      preventOverlap: true,
-      nodeSize: [80, 40],
-    },
-  })
-
-  // 监听节点点击事件
-  graphInstance.on('node:click', (evt: any) => {
-    const node = evt.item.getModel()
-    emit('nodeClick', node)
-  })
-
-  // 监听画布点击事件，用于创建节点
-  graphInstance.on('canvas:click', (evt: any) => {
-    if (isCreatingNode.value) {
-      // 如果正在创建节点模式，触发创建事件
-      emit('nodeCreate', { x: evt.x, y: evt.y })
-      isCreatingNode.value = false  // 重置创建模式
-    }
-  })
-
-  // 监听窗口大小变化
-  window.addEventListener('resize', handleResize)
+// 获取节点位置
+const getNodePosition = (nodeId: string) => {
+  const node = props.topologyData.nodes.find(n => n.id === nodeId || n.uuid === nodeId)
+  if (node) {
+    return { x: node.position_x || 0, y: node.position_y || 0 }
+  }
+  return { x: 0, y: 0 }
 }
 
-// 根据健康状态获取节点颜色
-const getNodeColorByHealth = (status: boolean) => {
-  return status ? '#52c41a' : '#ff4d4f' // 绿色表示健康，红色表示不健康
+// 根据健康状态获取节点边框颜色
+const getNodeBorderColor = (isHealthy: boolean) => {
+  return isHealthy ? '#52c41a' : '#ff4d4f'
 }
 
-// 渲染拓扑数据
-const renderTopology = () => {
-  if (!graphInstance || !props.topologyData) return
-  
-  // 准备节点数据
-  const nodes = props.topologyData.nodes.map(node => ({
-    id: node.uuid || node.id,
-    label: node.name,
-    x: node.position_x,
-    y: node.position_y,
-    isHealthy: node.is_healthy,
-    type: 'rect',
-    size: [80, 40],
-    style: {
-      fill: node.is_healthy ? '#e6f7ff' : '#fff2e8', // 健康为浅蓝，不健康为浅橙
-      stroke: node.is_healthy ? '#1890ff' : '#ff7a45',
-      lineWidth: 2,
-      radius: 4,
-    },
-    labelCfg: {
-      style: {
-        fill: '#333',
-        fontSize: 10,
-        fontWeight: 'bold'
-      }
-    }
-  }))
-  
-  // 准备边数据
-  const edges = props.topologyData.edges.map(edge => ({
-    id: edge.id || `${edge.source}-${edge.target}`,
-    source: edge.source,
-    target: edge.target,
-    label: edge.label || edge.direction || '',
-    style: {
-      stroke: '#999',
-      lineWidth: 2
-    }
-  }))
-  
-  // 重新创建整个图表（如果data方法不可用）
-  try {
-    // 尝试使用标准G6 API
-    if (typeof graphInstance.data === 'function') {
-      graphInstance.data({ nodes, edges })
-      graphInstance.render()
-      graphInstance.fitView([20, 20])
-    } else {
-      // 如果标准方法不可用，重新初始化
-      graphInstance.clear()
-      graphInstance.addNodes(nodes)
-      graphInstance.addEdges(edges)
-      graphInstance.render()
-      graphInstance.fitView([20, 20])
-    }
-  } catch (error) {
-    console.error('Error rendering topology:', error)
-    // 备用方法：完全重新创建图表
-    if (graphInstance) {
-      graphInstance.clear()
-      nodes.forEach(node => graphInstance.addItem('node', node))
-      edges.forEach(edge => graphInstance.addItem('edge', edge))
-      graphInstance.render()
-      graphInstance.fitView([20, 20])
-    }
+// 检查节点是否被选中
+const isSelected = (node: any) => {
+  return selectedNode.value && (selectedNode.value.uuid === node.uuid || selectedNode.value.id === node.id)
+}
+
+// 处理节点点击
+const handleNodeClick = (node: any) => {
+  selectedNode.value = node
+  emit('nodeClick', node)
+}
+
+// 处理节点双击
+const handleNodeDoubleClick = (node: any) => {
+  // 可能用于编辑节点
+}
+
+// 处理画布点击
+const handleCanvasClick = (event: MouseEvent) => {
+  // 如果点击的是空白区域，取消选择
+  if (event.target === canvasRef.value) {
+    selectedNode.value = null
   }
 }
 
 // 放大
 const zoomIn = () => {
-  if (graphInstance) {
-    graphInstance.zoom(1.2)
-  }
+  scale.value = Math.min(scale.value + 0.1, 2)
+  applyTransform()
 }
 
 // 缩小
 const zoomOut = () => {
-  if (graphInstance) {
-    graphInstance.zoom(0.8)
-  }
+  scale.value = Math.max(scale.value - 0.1, 0.5)
+  applyTransform()
 }
 
-// 适应视图
-const fitView = () => {
-  if (graphInstance) {
-    graphInstance.fitView([20, 20]);
+// 应用缩放和转换
+const applyTransform = () => {
+  if (canvasRef.value) {
+    canvasRef.value.style.transform = `scale(${scale.value}) translate(${translateX.value}px, ${translateY.value}px)`
   }
 }
 
 // 刷新数据
 const refreshData = () => {
-  renderTopology()
-}
-
-// 启用节点创建模式
-const enableNodeCreation = () => {
-  if (props.readOnly) return
-  isCreatingNode.value = !isCreatingNode.value
-  if (isCreatingNode.value) {
-    ElMessage.info('点击画布任意位置创建新节点')
-  }
-}
-
-// 处理窗口大小变化
-const handleResize = () => {
-  if (graphInstance && graphContainerRef.value) {
-    const { clientWidth, clientHeight } = graphContainerRef.value
-    if (typeof graphInstance.changeSize === 'function') {
-      graphInstance.changeSize(clientWidth, clientHeight)
-    } else {
-      // 如果changeSize方法不可用
-      graphInstance.changeSize(clientWidth, clientHeight)
-    }
-  }
+  // 触发重新渲染
 }
 
 // 监听数据变化
 watch(() => props.topologyData, () => {
-  renderTopology()
+  // 数据更新时重新渲染
 }, { deep: true })
 
-// 监听只读模式变化
-watch(() => props.readOnly, (newVal) => {
-  if (graphInstance) {
-    if (newVal) {
-      graphInstance.setMode('default')
-    } else {
-      graphInstance.setMode('default')
-    }
-  }
-})
-
 // 组件挂载
-onMounted(async () => {
-  await initGraph()
-  renderTopology()
-})
-
-// 组件卸载
-onUnmounted(() => {
-  if (graphInstance) {
-    graphInstance.destroy()
-  }
-  window.removeEventListener('resize', handleResize)
+onMounted(() => {
+  // 初始化
 })
 </script>
 
@@ -323,14 +173,8 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   position: relative;
-}
-
-.graph-container {
-  width: 100%;
-  height: 100%;
-  border: 1px solid #e4e7ed;
-  background-color: #fafafa;
-  overflow: hidden;
+  overflow: auto;
+  background-color: #f5f5f5;
 }
 
 .graph-controls {
@@ -379,5 +223,83 @@ onUnmounted(() => {
 
 .legend-text {
   font-size: 12px;
+}
+
+.topology-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-image: 
+    radial-gradient(circle, #d3d3d3 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.node-item {
+  position: absolute;
+  width: 120px;
+  min-height: 60px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.node-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+.node-item.selected {
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.5);
+}
+
+.node-item.healthy {
+  background-color: #f6ffed;
+}
+
+.node-item.unhealthy {
+  background-color: #fff2e8;
+}
+
+.node-header {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: #333;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-info {
+  flex: 1;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.node-basic-info {
+  text-align: center;
+  margin: 1px 0;
+}
+
+.node-basic-info .port {
+  color: #909399;
+  font-weight: normal;
+}
+
+.connections-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
 }
 </style>
