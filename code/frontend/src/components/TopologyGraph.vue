@@ -32,6 +32,7 @@
         }"
         :class="{ 'healthy': node.is_healthy, 'unhealthy': !node.is_healthy, 'selected': isSelected(node) }"
         @click.stop="handleNodeClick(node)"
+        @mousedown="startDrag(node, $event)"
         @dblclick="handleNodeDoubleClick(node)"
       >
         <div class="node-header">{{ node.name }}</div>
@@ -61,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -78,7 +79,7 @@ const props = defineProps<{
 }>()
 
 // 定义事件
-const emit = defineEmits(['nodeClick', 'nodeCreate'])
+const emit = defineEmits(['nodeClick', 'nodeCreate', 'nodeMove'])
 
 // 响应式数据
 const canvasRef = ref<HTMLElement>()
@@ -86,6 +87,9 @@ const selectedNode = ref<any>(null)
 const scale = ref(1)
 const translateX = ref(0)
 const translateY = ref(0)
+const isDragging = ref(false)
+const dragStartPos = ref({ x: 0, y: 0 })
+const currentNode = ref<any>(null)
 
 // 健康状态定义
 const healthStatuses = [
@@ -120,6 +124,55 @@ const handleNodeClick = (node: any) => {
   emit('nodeClick', node)
 }
 
+// 开始拖动节点
+const startDrag = (node: any, event: MouseEvent) => {
+  if (props.readOnly) return
+  
+  isDragging.value = true
+  currentNode.value = node
+  dragStartPos.value = {
+    x: event.clientX - (node.position_x || 0),
+    y: event.clientY - (node.position_y || 0)
+  }
+  
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', stopDrag)
+  
+  event.preventDefault()
+}
+
+// 拖动节点
+const onDrag = (event: MouseEvent) => {
+  if (!isDragging.value || !currentNode.value) return
+  
+  const canvasRect = canvasRef.value?.getBoundingClientRect()
+  if (!canvasRect) return
+  
+  // 计算相对于画布的实际位置
+  const actualX = (event.clientX - canvasRect.left) / scale.value
+  const actualY = (event.clientY - canvasRect.top) / scale.value
+  
+  // 更新节点位置
+  currentNode.value.position_x = actualX
+  currentNode.value.position_y = actualY
+  
+  // 发出移动事件以便父组件更新
+  emit('nodeMove', {
+    node: currentNode.value,
+    x: actualX,
+    y: actualY
+  })
+}
+
+// 停止拖动
+const stopDrag = () => {
+  isDragging.value = false
+  currentNode.value = null
+  
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', stopDrag)
+}
+
 // 处理节点双击
 const handleNodeDoubleClick = (node: any) => {
   // 可能用于编辑节点
@@ -130,8 +183,23 @@ const handleCanvasClick = (event: MouseEvent) => {
   // 如果点击的是空白区域，取消选择
   if (event.target === canvasRef.value) {
     selectedNode.value = null
+    // 触发新节点创建事件
+    const canvasRect = canvasRef.value?.getBoundingClientRect()
+    if (canvasRect) {
+      const actualX = (event.clientX - canvasRect.left) / scale.value
+      const actualY = (event.clientY - canvasRect.top) / scale.value
+      emit('nodeCreate', { x: actualX, y: actualY })
+    }
   }
 }
+
+// 监听只读模式变化
+watch(() => props.readOnly, (newVal) => {
+  if (newVal) {
+    // 如果变为只读，确保停止任何拖动
+    stopDrag()
+  }
+})
 
 // 放大
 const zoomIn = () => {
@@ -165,6 +233,11 @@ watch(() => props.topologyData, () => {
 // 组件挂载
 onMounted(() => {
   // 初始化
+})
+
+// 组件卸载时清理事件监听器
+onUnmounted(() => {
+  stopDrag()
 })
 </script>
 

@@ -28,6 +28,7 @@
           :read-only="false"
           @node-click="handleNodeClick"
           @node-create="handleNodeCreate"
+          @node-move="handleNodeMove"
         />
       </div>
       
@@ -146,7 +147,7 @@ const fetchDiagrams = async () => {
     const response = await linkApi.getLinks({
       link_type: 'architecture'  // 只获取架构图类型的
     })
-    diagrams.value = response.data.data || []
+    diagrams.value = response.data.data || response.data.results || []
     
     // 如果有架构图，选择第一个
     if (diagrams.value.length > 0 && !selectedDiagram.value) {
@@ -165,7 +166,7 @@ const loadDiagramData = async (diagramId: string) => {
     const response = await linkApi.getLinkTopology(diagramId, {uuid: diagramId})
     const { nodes, connections } = response.data
     
-    // 转换连接数据为G6可用的edges格式
+    // 转换连接数据为edges格式
     const edges = connections.map(conn => ({
       id: conn.uuid,
       source: conn.from_node,
@@ -242,8 +243,8 @@ const handleNodeCreate = async (position: any) => {
         name,
         basic_info_list: [],
         link: selectedDiagram.value,
-        position_x: position.x,
-        position_y: position.y
+        position_x: Math.round(position.x),
+        position_y: Math.round(position.y)
       })
       
       // 更新本地数据
@@ -258,6 +259,30 @@ const handleNodeCreate = async (position: any) => {
   } catch (error) {
     console.error('创建节点失败:', error)
     ElMessage.error('创建节点失败')
+  }
+}
+
+// 处理节点移动
+const handleNodeMove = async ({ node, x, y }: { node: any, x: number, y: number }) => {
+  try {
+    // 更新后端数据
+    await nodeApi.updateNode(node.uuid, {
+      ...node,
+      position_x: Math.round(x),
+      position_y: Math.round(y)
+    })
+    
+    // 更新本地数据
+    const index = topologyData.value.nodes.findIndex(n => n.uuid === node.uuid)
+    if (index !== -1) {
+      topologyData.value.nodes[index].position_x = Math.round(x)
+      topologyData.value.nodes[index].position_y = Math.round(y)
+    }
+    
+    ElMessage.success('节点位置已更新')
+  } catch (error) {
+    console.error('更新节点位置失败:', error)
+    ElMessage.error('更新节点位置失败')
   }
 }
 
