@@ -3,8 +3,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import G6 from '@antv/g6'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import * as G6 from '@antv/g6'
 
 // 定义组件属性
 const props = defineProps<{
@@ -13,7 +13,6 @@ const props = defineProps<{
     edges: Array<any>
   }
   selectedNode?: any
-  readOnly?: boolean
 }>()
 
 // 定义事件
@@ -26,9 +25,6 @@ let graphInstance: any = null
 // 初始化G6图
 const initGraph = async () => {
   if (!containerRef.value) return
-
-  // 等待DOM更新
-  await nextTick()
 
   // 获取容器尺寸
   const width = containerRef.value.clientWidth
@@ -53,16 +49,16 @@ const initGraph = async () => {
       size: [120, 60],
       style: {
         radius: 6,
-        stroke: '#5B8FF9',
-        fill: '#C6E5FF',
+        stroke: '#1890ff',
+        fill: '#e6f7ff',
         lineWidth: 2
       },
       labelCfg: {
         style: {
-          fill: '#000',
-          fontSize: 12
-        },
-        offset: 10
+          fill: '#333',
+          fontSize: 12,
+          fontWeight: 'bold'
+        }
       }
     },
     defaultEdge: {
@@ -73,25 +69,11 @@ const initGraph = async () => {
         endArrow: true
       },
       labelCfg: {
+        autoRotate: true,
         style: {
-          fill: '#333',
-          fontSize: 10
+          fontSize: 10,
+          fill: '#666'
         }
-      }
-    },
-    nodeStateStyles: {
-      selected: {
-        stroke: '#1890ff',
-        lineWidth: 3
-      },
-      hover: {
-        fillOpacity: 0.8
-      }
-    },
-    edgeStateStyles: {
-      selected: {
-        stroke: '#1890ff',
-        lineWidth: 3
       }
     }
   })
@@ -106,9 +88,6 @@ const initGraph = async () => {
   graphInstance.on('canvas:click', () => {
     emit('nodeClick', null)
   })
-
-  // 监听窗口大小变化
-  window.addEventListener('resize', handleResize)
 }
 
 // 渲染拓扑数据
@@ -121,22 +100,7 @@ const renderTopology = () => {
     label: node.name,
     x: node.position_x,
     y: node.position_y,
-    isHealthy: node.is_healthy,
-    type: 'rect',
-    size: [120, 60],
-    style: {
-      fill: node.is_healthy ? '#e6f7ff' : '#fff2e8',
-      stroke: node.is_healthy ? '#1890ff' : '#ff7a45',
-      lineWidth: 2,
-      radius: 6
-    },
-    labelCfg: {
-      style: {
-        fill: '#333',
-        fontSize: 12,
-        fontWeight: 'bold'
-      }
-    }
+    isHealthy: node.is_healthy
   }))
 
   // 准备边数据
@@ -144,57 +108,28 @@ const renderTopology = () => {
     id: edge.id || `${edge.source}-${edge.target}`,
     source: edge.source,
     target: edge.target,
-    label: edge.label || edge.direction || '',
-    style: {
-      stroke: '#999',
-      lineWidth: 2
-    }
+    label: edge.label || edge.direction || ''
   }))
 
-  // 设置数据并渲染
-  graphInstance.data({ nodes, edges })
-  graphInstance.render()
-
-  // 适应视图
-  graphInstance.fitView([20, 20])
-
-  // 高亮选中的节点
-  if (props.selectedNode) {
-    const nodeId = props.selectedNode.uuid || props.selectedNode.id
-    const nodeItem = graphInstance.findById(nodeId)
-    if (nodeItem) {
-      graphInstance.setItemState(nodeItem, 'selected', true)
+  // 使用read方法设置数据
+  try {
+    console.log('Graph instance:', graphInstance)
+    console.log('Graph instance type:', typeof graphInstance)
+    console.log('Available methods:', Object.keys(graphInstance || {}))
+    
+    if (graphInstance && typeof graphInstance.read === 'function') {
+      console.log('Calling graphInstance.read with data:', { nodes, edges })
+      graphInstance.read({ nodes, edges })
+    } else if (graphInstance && typeof graphInstance.setData === 'function') {
+      console.log('Calling graphInstance.setData with data:', { nodes, edges })
+      graphInstance.setData({ nodes, edges })
+      graphInstance.render()
+    } else {
+      console.error('Graph instance does not have read or setData method')
+      console.log('Graph instance methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(graphInstance)))
     }
-  }
-}
-
-// 处理窗口大小变化
-const handleResize = () => {
-  if (graphInstance && containerRef.value) {
-    const { clientWidth, clientHeight } = containerRef.value
-    graphInstance.changeSize(clientWidth, clientHeight)
-    graphInstance.fitView([20, 20])
-  }
-}
-
-// 放大
-const zoomIn = () => {
-  if (graphInstance) {
-    graphInstance.zoom(1.2)
-  }
-}
-
-// 缩小
-const zoomOut = () => {
-  if (graphInstance) {
-    graphInstance.zoom(0.8)
-  }
-}
-
-// 适应视图
-const fitView = () => {
-  if (graphInstance) {
-    graphInstance.fitView([20, 20])
+  } catch (error) {
+    console.error('Error reading graph data:', error)
   }
 }
 
@@ -203,33 +138,6 @@ watch(
   () => props.topologyData,
   () => {
     renderTopology()
-  },
-  { deep: true }
-)
-
-// 监听选中节点变化
-watch(
-  () => props.selectedNode,
-  (newVal, oldVal) => {
-    if (graphInstance) {
-      // 取消旧节点的选中状态
-      if (oldVal) {
-        const oldNodeId = oldVal.uuid || oldVal.id
-        const oldNodeItem = graphInstance.findById(oldNodeId)
-        if (oldNodeItem) {
-          graphInstance.setItemState(oldNodeItem, 'selected', false)
-        }
-      }
-
-      // 高亮新节点
-      if (newVal) {
-        const newNodeId = newVal.uuid || newVal.id
-        const newNodeItem = graphInstance.findById(newNodeId)
-        if (newNodeItem) {
-          graphInstance.setItemState(newNodeItem, 'selected', true)
-        }
-      }
-    }
   },
   { deep: true }
 )
@@ -245,7 +153,6 @@ onUnmounted(() => {
   if (graphInstance) {
     graphInstance.destroy()
   }
-  window.removeEventListener('resize', handleResize)
 })
 </script>
 

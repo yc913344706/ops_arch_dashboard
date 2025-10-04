@@ -18,11 +18,25 @@
         type="primary" 
         @click="createNewNode"
       >新建节点</el-button>
+      
+      <!-- 图控制按钮 -->
+      <div class="graph-controls">
+        <el-button @click="zoomIn" title="放大">
+          <el-icon><ZoomIn /></el-icon>
+        </el-button>
+        <el-button @click="zoomOut" title="缩小">
+          <el-icon><ZoomOut /></el-icon>
+        </el-button>
+        <el-button @click="fitView" title="适应视图">
+          <el-icon><FullScreen /></el-icon>
+        </el-button>
+      </div>
     </div>
     
     <div class="main-content">
       <div class="canvas-container" ref="canvasRef">
         <G6TopologyGraph 
+          ref="topologyGraphRef"
           :topology-data="topologyData" 
           :selected-node="selectedNode"
           @node-click="handleNodeClick"
@@ -213,6 +227,7 @@
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
+import { ZoomIn, ZoomOut, FullScreen } from '@element-plus/icons-vue'
 
 // 引入组件
 const G6TopologyGraph = defineAsyncComponent(() => import('@/components/G6TopologyGraph.vue'))
@@ -237,6 +252,7 @@ const tempConnection = ref({
   to_node: ''
 })
 const creatingDirection = ref<string | null>(null)
+const topologyGraphRef = ref()
 
 // 获取架构图列表
 const fetchDiagrams = async () => {
@@ -295,7 +311,28 @@ const onDiagramChange = async (value: string) => {
 
 // 处理节点点击
 const handleNodeClick = (node: any) => {
-  selectedNode.value = { ...node }
+  selectedNode.value = node ? { ...node } : null
+}
+
+// 放大
+const zoomIn = () => {
+  if (topologyGraphRef.value && topologyGraphRef.value.zoomIn) {
+    topologyGraphRef.value.zoomIn()
+  }
+}
+
+// 缩小
+const zoomOut = () => {
+  if (topologyGraphRef.value && topologyGraphRef.value.zoomOut) {
+    topologyGraphRef.value.zoomOut()
+  }
+}
+
+// 适应视图
+const fitView = () => {
+  if (topologyGraphRef.value && topologyGraphRef.value.fitView) {
+    topologyGraphRef.value.fitView()
+  }
 }
 
 // 创建新节点 - 通用方法
@@ -544,6 +581,16 @@ onMounted(() => {
   border-bottom: 1px solid #e4e7ed;
   display: flex;
   align-items: center;
+}
+
+.graph-controls {
+  display: flex;
+  margin-left: auto;
+  gap: 5px;
+}
+
+.graph-controls .el-button {
+  padding: 8px;
 }
 
 .main-content {
