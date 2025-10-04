@@ -4,8 +4,8 @@ from . import views
 urlpatterns = [
     # 架构图相关接口
     path('links/', views.LinkView.as_view(), name='link-list'),
-    path('links/<uuid:link_uuid>/', views.LinkDetailView.as_view(), name='link-detail'),
-    path('links/<uuid:link_uuid>/topology/', views.LinkTopologyView.as_view(), name='link-topology'),
+    path('link/', views.LinkDetailView.as_view(), name='link-detail'),
+    path('link/topology/', views.LinkTopologyView.as_view(), name='link-topology'),
     
     # 节点相关接口
     path('nodes/', views.NodeView.as_view(), name='node-list'),
@@ -14,5 +14,5 @@ urlpatterns = [
     path('connections/', views.NodeConnectionView.as_view(), name='connection-list'),
     
     # 节点健康相关接口
-    path('nodes/<uuid:node_uuid>/health/', views.NodeHealthView.as_view(), name='node-health'),
+    path('node/health/', views.NodeHealthView.as_view(), name='node-health'),
 ]

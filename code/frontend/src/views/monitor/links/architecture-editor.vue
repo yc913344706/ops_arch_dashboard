@@ -146,7 +146,7 @@ const fetchDiagrams = async () => {
     const response = await linkApi.getLinks({
       link_type: 'architecture'  // 只获取架构图类型的
     })
-    diagrams.value = response.data.results || []
+    diagrams.value = response.data.data || []
     
     // 如果有架构图，选择第一个
     if (diagrams.value.length > 0 && !selectedDiagram.value) {
@@ -162,7 +162,7 @@ const fetchDiagrams = async () => {
 // 加载选中的架构图数据
 const loadDiagramData = async (diagramId: string) => {
   try {
-    const response = await linkApi.getLinkTopology(diagramId)
+    const response = await linkApi.getLinkTopology(diagramId, {uuid: diagramId})
     const { nodes, connections } = response.data
     
     // 转换连接数据为G6可用的edges格式

@@ -1,6 +1,3 @@
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 from django.views import View
 from lib.request_tool import pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
@@ -144,9 +141,11 @@ class LinkView(View):
 class LinkDetailView(View):
     """单个架构图详情接口"""
     
-    def get(self, request, link_uuid):
+    def get(self, request):
         """获取单个架构图详情"""
         try:
+            body = pub_get_request_body(request)
+            link_uuid = body.get('uuid')
             color_logger.debug(f"获取单个架构图详情: {link_uuid}")
             link = Link.objects.get(uuid=link_uuid)
             
@@ -166,17 +165,14 @@ class LinkDetailView(View):
             return pub_error_response(f"获取架构图详情失败: {e.args}")
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class LinkTopologyView(View):
     """架构图拓扑接口"""
     
-    def get(self, request, link_uuid):
+    def get(self, request):
         """获取架构图拓扑"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
-
         try:
+            body = pub_get_request_body(request)
+            link_uuid = body.get('uuid')
             link = Link.objects.get(uuid=link_uuid)
             nodes = Node.objects.filter(link=link, is_active=True)
             connections = NodeConnection.objects.filter(link=link, is_active=True)
@@ -217,15 +213,11 @@ class LinkTopologyView(View):
             return pub_error_response(f"获取架构图拓扑失败: {e.args}")
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class NodeView(View):
     """节点相关接口"""
     
     def get(self, request):
         """获取节点列表"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -280,9 +272,6 @@ class NodeView(View):
     
     def post(self, request):
         """创建节点"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -317,9 +306,6 @@ class NodeView(View):
     
     def put(self, request):
         """更新节点"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -353,9 +339,6 @@ class NodeView(View):
     
     def delete(self, request):
         """删除节点"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -369,7 +352,6 @@ class NodeView(View):
             return pub_error_response(f"删除节点失败: {e.args}")
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class NodeConnectionView(View):
     """节点连接相关接口"""
     
@@ -541,17 +523,14 @@ class NodeConnectionView(View):
             return pub_error_response(f"删除连接失败: {e.args}")
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class NodeHealthView(View):
     """节点健康状态接口"""
     
-    def get(self, request, node_uuid):
+    def get(self, request):
         """获取节点健康状态"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
-
         try:
+            body = pub_get_request_body(request)
+            node_uuid = body.get('uuid')
             node = Node.objects.get(uuid=node_uuid)
             latest_health = node.health_records.first()  # 获取最新健康记录
 

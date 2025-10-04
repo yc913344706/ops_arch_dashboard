@@ -41,7 +41,7 @@ import {
   Refresh,
   Plus
 } from '@element-plus/icons-vue'
-import { Graph as G6Graph } from '@antv/g6'
+import { ElMessage } from 'element-plus'
 
 // 定义组件属性
 const props = defineProps<{
@@ -80,8 +80,12 @@ const initGraph = async () => {
   const width = container.clientWidth
   const height = container.clientHeight
   
+  // 动态导入G6
+  const G6Module = await import('@antv/g6')
+  const G6 = G6Module?.default || G6Module
+  
   // 创建G6图实例
-  graphInstance = new G6Graph({
+  graphInstance = new G6.Graph({
     container: container,
     width,
     height,
@@ -207,12 +211,32 @@ const renderTopology = () => {
     }
   }))
   
-  // 设置数据并渲染
-  graphInstance.data({ nodes, edges })
-  graphInstance.render()
-  
-  // 适应视图
-  graphInstance.fitView([20, 20]) // 添加一些边距
+  // 重新创建整个图表（如果data方法不可用）
+  try {
+    // 尝试使用标准G6 API
+    if (typeof graphInstance.data === 'function') {
+      graphInstance.data({ nodes, edges })
+      graphInstance.render()
+      graphInstance.fitView([20, 20])
+    } else {
+      // 如果标准方法不可用，重新初始化
+      graphInstance.clear()
+      graphInstance.addNodes(nodes)
+      graphInstance.addEdges(edges)
+      graphInstance.render()
+      graphInstance.fitView([20, 20])
+    }
+  } catch (error) {
+    console.error('Error rendering topology:', error)
+    // 备用方法：完全重新创建图表
+    if (graphInstance) {
+      graphInstance.clear()
+      nodes.forEach(node => graphInstance.addItem('node', node))
+      edges.forEach(edge => graphInstance.addItem('edge', edge))
+      graphInstance.render()
+      graphInstance.fitView([20, 20])
+    }
+  }
 }
 
 // 放大
@@ -232,7 +256,7 @@ const zoomOut = () => {
 // 适应视图
 const fitView = () => {
   if (graphInstance) {
-    graphInstance.fitView([20, 20])
+    graphInstance.fitView([20, 20]);
   }
 }
 
@@ -254,7 +278,12 @@ const enableNodeCreation = () => {
 const handleResize = () => {
   if (graphInstance && graphContainerRef.value) {
     const { clientWidth, clientHeight } = graphContainerRef.value
-    graphInstance.changeSize(clientWidth, clientHeight)
+    if (typeof graphInstance.changeSize === 'function') {
+      graphInstance.changeSize(clientWidth, clientHeight)
+    } else {
+      // 如果changeSize方法不可用
+      graphInstance.changeSize(clientWidth, clientHeight)
+    }
   }
 }
 

@@ -9,7 +9,7 @@ const monitorApiMap = {
   createLink: '/monitor/links/',
   updateLink: (id: string) => `/monitor/links/${id}/`,
   deleteLink: (id: string) => `/monitor/links/${id}/`,
-  getLinkTopology: (id: string) => `/monitor/links/${id}/topology/`,
+  getLinkTopology: `/monitor/link/topology/`,
   
   // 节点相关API
   getNodes: '/monitor/nodes/',
@@ -43,7 +43,7 @@ export const linkApi = {
   deleteLink: (id: string) => http.request('delete', monitorApiMap.deleteLink(id)),
   
   // 获取链路拓扑
-  getLinkTopology: (id: string) => http.request('get', monitorApiMap.getLinkTopology(id))
+  getLinkTopology: (id: string, params: any) => http.request('get', monitorApiMap.getLinkTopology, { params })
 }
 
 // 节点相关API

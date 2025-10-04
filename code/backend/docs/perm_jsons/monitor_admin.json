@@ -1,22 +1,23 @@
 {
-    "backend": {
-      "api": {
-        "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"]
-      }
-    },
-    "frontend": {
-      "routes": [
-        "monitor.dashboard",
-        "monitor.architecture",
-        "monitor.links",
-        "monitor.link",
-        "monitor.nodes",
-        "monitor.alerts",
-        "monitor.settings"
-      ],
-      "resources": [
-        "monitor:createDiagram"
-      ]
+  "backend": {
+    "api": {
+      "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"],
+      "/api/v1/monitor/link/topology/": ["GET"],
+      "/api/v1/monitor/nodes/": ["GET", "POST", "PUT", "DELETE"]
     }
+  },
+  "frontend": {
+    "routes": [
+      "monitor.dashboard",
+      "monitor.architecture",
+      "monitor.links",
+      "monitor.link",
+      "monitor.nodes",
+      "monitor.alerts",
+      "monitor.settings"
+    ],
+    "resources": [
+      "monitor:createDiagram"
+    ]
   }
-  
+}
