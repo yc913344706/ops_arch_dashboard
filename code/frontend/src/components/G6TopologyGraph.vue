@@ -50,6 +50,12 @@ const initGraph = async () => {
       'drag-canvas', // 拖动整个画布视图
       'zoom-canvas', // 缩放画布视图
       'click-select', // 点击选择图元素
+      'drag-element', // 拖动元素
+      // 'create-edge', // 创建边
+      {
+        type: 'create-edge',
+        trigger: 'click',
+      }
     ],
     layout: {
       /**
@@ -70,7 +76,13 @@ const initGraph = async () => {
       nodeSize: [80, 40],
     },
     node: {},
-    edge: {},
+    edge: {
+      type: 'polyline', // 边类型，内置边类型名称或者自定义边的名称，比如 line （直线边） 或者 polyline （折线边）
+      style: {
+        stroke: '#999',
+        lineWidth: 2
+      },
+    },
     // 工具栏： https://g6.antv.antgroup.com/manual/plugin/toolbar
     plugins: [
     {
@@ -210,18 +222,9 @@ const renderTopology = () => {
        * - 折线边配置： https://g6.antv.antgroup.com/manual/element/edge/polyline
        * 
        */
-      id: edge.id || `${edge.source}-${edge.target}`,
-
-      type: 'polyline', // 边类型，内置边类型名称或者自定义边的名称，比如 line （直线边） 或者 polyline （折线边）
-      
+      id: edge.id || `${edge.source}-${edge.target}`,      
       source: edge.source,
       target: edge.target,
-
-      // label: edge.label || edge.direction || '',
-      style: {
-        stroke: '#999',
-        lineWidth: 2
-      }
     }
   })
   console.log('Processed edges:', edges)
