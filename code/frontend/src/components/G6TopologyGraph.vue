@@ -43,9 +43,14 @@ const initGraph = async () => {
     width,
     // 容器高度	画布高度(像素)
     height,
-    modes: {
-      default: ['drag-canvas', 'zoom-canvas']
-    },
+    // 自动适配策略，'view'(适应视图) | 'center'(居中) | object
+    autoFit: 'center',
+    // 交互：https://g6.antv.antgroup.com/manual/behavior/overview
+    behaviors: [
+      'drag-canvas', // 拖动整个画布视图
+      'zoom-canvas', // 缩放画布视图
+      'click-select', // 点击选择图元素
+    ],
     layout: {
       /**
        * 布局： dagre： 
@@ -64,50 +69,33 @@ const initGraph = async () => {
       ranksep: 50,
       nodeSize: [80, 40],
     },
-    defaultNode: {
-      /**
-       * 节点通用配置项： https://g6.antv.antgroup.com/manual/element/node/base-node
-       *     type: 'circle', // 节点类型
-       *     style: {}, // 节点样式
-       *     state: {}, // 状态样式
-       *     palette: {}, // 色板配置
-       *     animation: {}, // 动画配置
-       * 
-       * rect 节点： https://g6.antv.antgroup.com/manual/element/node/rect
-       */
-      type: 'rect',
-      style: {
-        radius: 6,
-        stroke: '#1890ff',
-        fill: '#e6f7ff',
-        lineWidth: 2
-      },
-      labelCfg: {
-        style: {
-          fill: '#333',
-          fontSize: 12,
-          fontWeight: 'bold'
-        },
-        offset: 0 // 确保标签在节点中心显示
-      }
-    },
-    defaultEdge: {
-      type: 'polyline',
-      style: {
-        stroke: '#999',
-        lineWidth: 2,
-        endArrow: true
-      },
-      labelCfg: {
-        autoRotate: true,
-        style: {
-          fontSize: 10,
-          fill: '#666'
+    node: {},
+    edge: {},
+    // 工具栏： https://g6.antv.antgroup.com/manual/plugin/toolbar
+    plugins: [
+    {
+      type: 'toolbar',
+      position: 'top-right',
+      getItems: () => [
+        { id: 'zoom-in', value: 'zoom-in' },
+        { id: 'zoom-out', value: 'zoom-out' },
+        { id: 'auto-fit', value: 'auto-fit' },
+      ],
+      onClick: (value) => {
+        // 处理按钮点击事件
+        if (value === 'zoom-in') {
+          graphInstance.zoomTo(1.1);
+        } else if (value === 'zoom-out') {
+          graphInstance.zoomTo(0.9);
+        } else if (value === 'auto-fit') {
+          graphInstance.fitView();
         }
-      }
-    }
+      },
+    },
+  ],
   })
 
+  // 事件： https://g6.antv.antgroup.com/api/event
   // 监听节点点击事件
   graphInstance.on('node:click', (evt: any) => {
     if (evt) {
@@ -140,27 +128,65 @@ const renderTopology = () => {
   console.log('Preparing nodes from topology data:', props.topologyData.nodes)
   const nodes = props.topologyData.nodes.map(node => {
     console.log('Processing node:', node)
+    // node 属性： https://g6.antv.antgroup.com/manual/element/node/base-node#nodeoptions
     return {
-      id: node.uuid || node.id,
-      label: node.name,
-      x: node.position_x,
-      y: node.position_y,
-      isHealthy: node.is_healthy,
+      /**
+       * 节点通用配置项： https://g6.antv.antgroup.com/manual/element/node/base-node
+       *     type: 'circle', // 节点类型
+       *     style: {}, // 节点样式
+       *     state: {}, // 状态样式
+       *     palette: {}, // 色板配置
+       *     animation: {}, // 动画配置
+       * 
+       * rect 节点： https://g6.antv.antgroup.com/manual/element/node/rect
+       */
       type: 'rect',
-      size: [80, 40], // 调整节点尺寸为更合适的大小
+      id: node.uuid || node.id,
+      // x: node.position_x,
+      // y: node.position_y,
+      // isHealthy: node.is_healthy,
+      // size: [80, 40], // 调整节点尺寸为更合适的大小
       style: {
-        fill: node.is_healthy ? '#e6f7ff' : '#fff2e8',
-        stroke: node.is_healthy ? '#1890ff' : '#ff7a45',
-        lineWidth: 2,
-        radius: 6
-      },
-      labelCfg: {
-        style: {
-          fill: '#333',
-          fontSize: 12,
-          fontWeight: 'bold'
-        },
-        offset: 0 // 确保标签在节点中心显示
+        /* 主图形
+         * - 主图形是节点的核心部分，定义了节点的基本形状和外观。
+         * - 完整配置项https://g6.antv.antgroup.com/manual/element/node/base-node#%E8%99%9A%E7%BA%BF%E8%BE%B9%E6%A1%86%E6%A0%B7%E5%BC%8F
+         */
+        fill: node.is_healthy ? '#e6f7ff' : '#fff2e8',  // 填充
+        lineWidth: 2, // 线宽
+        radius: 6, // 圆角
+        stroke: node.is_healthy ? '#1890ff' : '#ff7a45', // 描边
+        size: [80, 40], // 调整节点尺寸为更合适的大小
+
+        /* 标签
+         * - 标签用于显示节点的文本信息，支持多种样式配置和布局方式。
+         */
+        // labelText: node.name, // 节点名称
+        // labelWordWrap: true, // 自动换行
+        // labelMaxWidth: '150%', // 节点宽度的百分比
+        // labelMaxLines: 3, // 最大行数
+        // labelTextOverflow: 'ellipsis', // 超出部分显示省略号
+        // labelPlacement: 'bottom', // 标签位置
+        // labelTextAlign: 'center', // 节点文本水平居中
+
+        /* 图标样式
+         * - 节点图标支持三种常见的使用方式：文字图标、图片图标和 IconFont 图标。
+         */
+        iconText: node.name,
+        iconFill: '#C41D7F', // 深粉色图标
+
+        /* 连接桩样式
+         * - 连接桩是节点上的连接点，用于连接边。
+         */
+        // port: true,
+        // ports: [
+        //   { key: 'top', placement: 'top', fill: '#7E92B5' },
+        //   { key: 'right', placement: 'right', fill: '#F4664A' },
+        //   { key: 'bottom', placement: 'bottom', fill: '#FFBE3A' },
+        //   { key: 'left', placement: 'left', fill: '#D580FF' },
+        // ],
+        // portR: 3,
+        // portLineWidth: 1,
+        // portStroke: '#fff',
       }
     }
   })
@@ -171,10 +197,27 @@ const renderTopology = () => {
   const edges = props.topologyData.edges.map(edge => {
     console.log('Processing edge:', edge)
     return {
+      /**
+       * edge 边： https://g6.antv.antgroup.com/manual/element/edge/overview
+       * 
+       * 配置边的方式有三种，按优先级从高到低如下：
+       * - 使用 graph.setEdge() 动态配置
+       * - 实例化图时全局配置
+       * - 在数据中动态属性
+       * 
+       * 边配置：
+       * - 通用配置： https://g6.antv.antgroup.com/manual/element/edge/base-edge
+       * - 折线边配置： https://g6.antv.antgroup.com/manual/element/edge/polyline
+       * 
+       */
       id: edge.id || `${edge.source}-${edge.target}`,
+
+      type: 'polyline', // 边类型，内置边类型名称或者自定义边的名称，比如 line （直线边） 或者 polyline （折线边）
+      
       source: edge.source,
       target: edge.target,
-      label: edge.label || edge.direction || '',
+
+      // label: edge.label || edge.direction || '',
       style: {
         stroke: '#999',
         lineWidth: 2
@@ -188,7 +231,12 @@ const renderTopology = () => {
 
   // 使用setData方法设置数据
   if (graphInstance && typeof graphInstance.setData === 'function') {
-    graphInstance.setData({ nodes, edges })
+    console.log('Setting data for graph instance:', { nodes: nodes, edges: edges })
+    // setdata: https://g6.antv.antgroup.com/api/data#graphsetdata
+    graphInstance.setData({ nodes: nodes, edges: edges })
+
+    console.log('Rendering graph instance...')
+    // render: https://g6.antv.antgroup.com/api/render#graphrender
     graphInstance.render()
     
     // 确保标签正确显示
