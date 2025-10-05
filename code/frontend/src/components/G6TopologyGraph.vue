@@ -21,6 +21,7 @@ const emit = defineEmits(['nodeClick'])
 // 响应式数据
 const containerRef = ref<HTMLElement>()
 let graphInstance: any = null
+let currentNodes: any[] = []
 
 // 初始化G6图
 const initGraph = async () => {
@@ -80,12 +81,24 @@ const initGraph = async () => {
 
   // 监听节点点击事件
   graphInstance.on('node:click', (evt: any) => {
-    const node = evt.item.getModel()
-    emit('nodeClick', node)
+    if (evt) {
+      // 从事件对象中获取节点ID
+      const target = evt.item || evt.target
+      if (target && target.id) {
+        // 使用节点ID查找完整的节点数据
+        const nodeId = target.id
+        
+        // 从当前设置的数据中查找节点
+        const node = currentNodes.find((n: any) => n.id === nodeId)
+        if (node) {
+          emit('nodeClick', node)
+        }
+      }
+    }
   })
 
   // 监听画布点击事件
-  graphInstance.on('canvas:click', () => {
+  graphInstance.on('canvas:click', (evt: any) => {
     emit('nodeClick', null)
   })
 }
@@ -100,7 +113,8 @@ const renderTopology = () => {
     label: node.name,
     x: node.position_x,
     y: node.position_y,
-    isHealthy: node.is_healthy
+    isHealthy: node.is_healthy,
+    type: 'rect'
   }))
 
   // 准备边数据
@@ -111,25 +125,13 @@ const renderTopology = () => {
     label: edge.label || edge.direction || ''
   }))
 
-  // 使用read方法设置数据
-  try {
-    console.log('Graph instance:', graphInstance)
-    console.log('Graph instance type:', typeof graphInstance)
-    console.log('Available methods:', Object.keys(graphInstance || {}))
-    
-    if (graphInstance && typeof graphInstance.read === 'function') {
-      console.log('Calling graphInstance.read with data:', { nodes, edges })
-      graphInstance.read({ nodes, edges })
-    } else if (graphInstance && typeof graphInstance.setData === 'function') {
-      console.log('Calling graphInstance.setData with data:', { nodes, edges })
-      graphInstance.setData({ nodes, edges })
-      graphInstance.render()
-    } else {
-      console.error('Graph instance does not have read or setData method')
-      console.log('Graph instance methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(graphInstance)))
-    }
-  } catch (error) {
-    console.error('Error reading graph data:', error)
+  // 保存当前节点数据以便后续查找
+  currentNodes = nodes
+
+  // 使用setData方法设置数据
+  if (graphInstance && typeof graphInstance.setData === 'function') {
+    graphInstance.setData({ nodes, edges })
+    graphInstance.render()
   }
 }
 

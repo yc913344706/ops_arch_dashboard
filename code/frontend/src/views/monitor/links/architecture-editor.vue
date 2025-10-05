@@ -311,7 +311,10 @@ const onDiagramChange = async (value: string) => {
 
 // 处理节点点击
 const handleNodeClick = (node: any) => {
+  console.log('Node clicked in editor:', node)
+  console.log('Selected node before update:', selectedNode.value)
   selectedNode.value = node ? { ...node } : null
+  console.log('Selected node after update:', selectedNode.value)
 }
 
 // 放大
