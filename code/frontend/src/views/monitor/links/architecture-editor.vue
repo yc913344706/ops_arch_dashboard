@@ -32,112 +32,115 @@
       </div>
       
       <el-aside class="operation-panel" width="300px">
-        <!-- 节点信息栏 -->
-        <div v-if="selectedNode" class="node-info-panel">
-          <h3>节点信息</h3>
-          <el-form :model="selectedNode" label-width="80px" size="small">
-            <el-form-item label="名称">
-              <el-input v-model="selectedNode.style.iconText" @change="updateNodeInfo" />
-            </el-form-item>
-            
-            <el-form-item label="基础信息">
-              <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="basic-info-item">
-                <el-input 
-                  v-model="info.host" 
-                  placeholder="主机" 
-                  size="small"
-                  style="width: 40%; margin-right: 5px;"
-                  @change="updateNodeInfo"
-                />
-                <el-input 
-                  v-model="info.port" 
-                  placeholder="端口" 
-                  size="small"
-                  type="number"
-                  style="width: 30%; margin-right: 5px;"
-                  @change="updateNodeInfo"
-                />
-                <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
+        <div v-if="selectedNode">
+          <el-tabs type="border-card" class="tabs-container">
+            <el-tab-pane label="节点信息">
+              <div class="node-info-panel">
+                <el-form :model="selectedNode" label-width="80px" size="small">
+                  <el-form-item label="名称">
+                    <el-input v-model="selectedNode.style.iconText" @change="updateNodeInfo" />
+                  </el-form-item>
+                  
+                  <el-form-item label="基础信息">
+                    <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="basic-info-item">
+                      <el-input 
+                        v-model="info.host" 
+                        placeholder="主机" 
+                        size="small"
+                        style="width: 40%; margin-right: 5px;"
+                        @change="updateNodeInfo"
+                      />
+                      <el-input 
+                        v-model="info.port" 
+                        placeholder="端口" 
+                        size="small"
+                        type="number"
+                        style="width: 30%; margin-right: 5px;"
+                        @change="updateNodeInfo"
+                      />
+                      <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
+                    </div>
+                    <el-button @click="addBasicInfo" size="small">添加信息</el-button>
+                  </el-form-item>
+                  
+                  <el-form-item label="健康状态">
+                    <el-tag :type="selectedNode.is_healthy ? 'success' : 'danger'">
+                      {{ selectedNode.is_healthy ? '健康' : '异常' }}
+                    </el-tag>
+                  </el-form-item>
+                </el-form>
               </div>
-              <el-button @click="addBasicInfo" size="small">添加信息</el-button>
-            </el-form-item>
-            
-            <el-form-item label="健康状态">
-              <el-tag :type="selectedNode.is_healthy ? 'success' : 'danger'">
-                {{ selectedNode.is_healthy ? '健康' : '异常' }}
-              </el-tag>
-            </el-form-item>
-          </el-form>
-        </div>
-        
-        <!-- 操作栏 -->
-        <div v-if="selectedNode" class="operation-section">
-          <h3>操作</h3>
-          
-          <!-- 连接管理 -->
-          <div class="connection-management">
-            <h4>连接管理</h4>
-            
-            <div class="existing-connections">
-              <div 
-                v-for="conn in nodeConnections" 
-                :key="conn.uuid" 
-                class="connection-item"
-              >
-                <span>{{ conn.direction }} -> {{ getNodeName(conn.to_node) }}</span>
-                <el-button 
-                  size="small" 
-                  type="danger" 
-                  @click="deleteConnection(conn.uuid)"
-                >
-                  删除
-                </el-button>
+            </el-tab-pane>
+            <el-tab-pane label="操作">
+              <div class="operation-section">
+                <!-- 连接管理 -->
+                <div class="connection-management">
+                  <h4>连接管理</h4>
+                  
+                  <div class="existing-connections">
+                    <div 
+                      v-for="conn in nodeConnections" 
+                      :key="conn.uuid" 
+                      class="connection-item"
+                    >
+                      <span>{{ conn.direction }} -> {{ getNodeName(conn.to_node) }}</span>
+                      <el-button 
+                        size="small" 
+                        type="danger" 
+                        @click="deleteConnection(conn.uuid)"
+                      >
+                        删除
+                      </el-button>
+                    </div>
+                    
+                    <div v-if="nodeConnections.length === 0" class="no-connections">
+                      暂无连接
+                    </div>
+                  </div>
+                  
+                  <el-divider />
+                  
+                  <h5>添加连接</h5>
+                  <el-form :model="tempConnection" label-width="60px" size="small">
+                    <!-- <el-form-item label="方向">
+                      <el-select v-model="tempConnection.direction" placeholder="选择方向">
+                        <el-option label="上" value="up" />
+                        <el-option label="下" value="down" />
+                        <el-option label="左" value="left" />
+                        <el-option label="右" value="right" />
+                      </el-select>
+                    </el-form-item> -->
+                    <el-form-item label="目标节点">
+                      <el-select 
+                        v-model="tempConnection.to_node" 
+                        placeholder="选择目标节点"
+                        filterable
+                      >
+                        <el-option
+                          v-for="node in availableNodes"
+                          :key="node.uuid"
+                          :label="node.name"
+                          :value="node.uuid"
+                          :disabled="node.uuid === selectedNode.uuid"
+                        />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item>
+                      <el-button 
+                        type="primary" 
+                        size="small"
+                        @click="createConnection"
+                        :disabled="!tempConnection.to_node"
+                      >
+                        <!-- :disabled="!tempConnection.direction || !tempConnection.to_node" -->
+                        添加连接
+                      </el-button>
+                    </el-form-item>
+                  </el-form>
+                </div>
               </div>
-              
-              <div v-if="nodeConnections.length === 0" class="no-connections">
-                暂无连接
-              </div>
-            </div>
-            
-            <el-divider />
-            
-            <h5>添加连接</h5>
-            <el-form :model="tempConnection" label-width="60px" size="small">
-              <el-form-item label="方向">
-                <el-select v-model="tempConnection.direction" placeholder="选择方向">
-                  <el-option label="上" value="up" />
-                  <el-option label="下" value="down" />
-                  <el-option label="左" value="left" />
-                  <el-option label="右" value="right" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="节点">
-                <el-select 
-                  v-model="tempConnection.to_node" 
-                  placeholder="选择节点"
-                  filterable
-                >
-                  <el-option
-                    v-for="node in availableNodes"
-                    :key="node.uuid"
-                    :label="node.name"
-                    :value="node.uuid"
-                    :disabled="node.uuid === selectedNode.uuid"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item>
-                <el-button 
-                  type="primary" 
-                  size="small"
-                  @click="createConnection"
-                  :disabled="!tempConnection.direction || !tempConnection.to_node"
-                >
-                  添加连接
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
         
         <!-- 空状态 -->
@@ -212,7 +215,7 @@ const newNodeForm = ref({
   basic_info_list: [{}] // 默认添加一个空的信息项
 })
 const tempConnection = ref({
-  direction: '',
+  // direction: '',
   to_node: ''
 })
 const creatingDirection = ref<string | null>(null)
@@ -248,8 +251,8 @@ const loadDiagramData = async (diagramId: string) => {
       id: conn.uuid,
       source: conn.from_node,
       target: conn.to_node,
-      label: conn.direction,
-      direction: conn.direction
+      // label: conn.direction,
+      // direction: conn.direction
     }))
     
     topologyData.value = {
@@ -367,7 +370,7 @@ const confirmCreateNode = async () => {
       await nodeConnectionApi.createConnection({
         from_node: selectedNode.value.uuid,
         to_node: newNode.uuid,
-        direction: creatingDirection.value,
+        // direction: creatingDirection.value,
         link: selectedDiagram.value
       })
     }
@@ -447,7 +450,8 @@ const getNodeName = (nodeId: string) => {
 
 // 创建连接
 const createConnection = async () => {
-  if (!selectedNode.value || !tempConnection.value.direction || !tempConnection.value.to_node) {
+  // if (!selectedNode.value || !tempConnection.value.direction || !tempConnection.value.to_node) {
+  if (!selectedNode.value || !tempConnection.value.to_node) {
     ElMessage.error('请填写完整的连接信息')
     return
   }
@@ -456,7 +460,7 @@ const createConnection = async () => {
     const request_data = {
       from_node: selectedNode.value.id,
       to_node: tempConnection.value.to_node,
-      direction: tempConnection.value.direction,
+      // direction: tempConnection.value.direction,
       link: selectedDiagram.value
     }
     console.log('request_data:', request_data)
@@ -467,7 +471,9 @@ const createConnection = async () => {
     await loadDiagramData(selectedDiagram.value)
     
     // 重置表单
-    tempConnection.value = { direction: '', to_node: '' }
+    tempConnection.value = { 
+      // direction: '', 
+      to_node: '' }
     
     ElMessage.success('连接创建成功')
   } catch (error) {

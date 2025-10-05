@@ -197,7 +197,7 @@ class LinkTopologyView(View):
                     'uuid': str(conn.uuid),
                     'from_node': str(conn.from_node.uuid),
                     'to_node': str(conn.to_node.uuid),
-                    'direction': conn.direction
+                    # 'direction': conn.direction
                 })
 
             return pub_success_response({
@@ -397,7 +397,7 @@ class NodeConnectionView(View):
                         'uuid': str(conn.to_node.uuid),
                         'name': conn.to_node.name
                     },
-                    'direction': conn.direction,
+                    # 'direction': conn.direction,
                     'link': {
                         'uuid': str(conn.link.uuid),
                         'name': conn.link.name
@@ -425,13 +425,13 @@ class NodeConnectionView(View):
             
             from_node_id = body.get('from_node')
             to_node_id = body.get('to_node')
-            direction = body.get('direction')
+            # direction = body.get('direction')
             link_id = body.get('link')
             
             # 验证必填字段
             assert from_node_id, '起始节点不能为空'
             assert to_node_id, '目标节点不能为空'
-            assert direction, '方向不能为空'
+            # assert direction, '方向不能为空'
             assert link_id, '架构图不能为空'
             
             # 验证节点和架构图是否存在
@@ -448,7 +448,7 @@ class NodeConnectionView(View):
             connection = NodeConnection.objects.create(
                 from_node=from_node,
                 to_node=to_node,
-                direction=direction,
+                # direction=direction,
                 link=link
             )
             
@@ -456,7 +456,7 @@ class NodeConnectionView(View):
                 'uuid': str(connection.uuid),
                 'from_node': str(connection.from_node.uuid),
                 'to_node': str(connection.to_node.uuid),
-                'direction': connection.direction,
+                # 'direction': connection.direction,
                 'link': str(connection.link.uuid)
             })
         except Exception as e:
@@ -475,9 +475,9 @@ class NodeConnectionView(View):
             connection = NodeConnection.objects.filter(uuid=uuid).first()
             assert connection, '更新的连接不存在'
 
-            direction = body.get('direction')
-            if direction:
-                connection.direction = direction
+            # direction = body.get('direction')
+            # if direction:
+            #     connection.direction = direction
 
             is_active = body.get('is_active')
             if is_active is not None:
@@ -489,7 +489,7 @@ class NodeConnectionView(View):
                 'uuid': str(connection.uuid),
                 'from_node': str(connection.from_node.uuid),
                 'to_node': str(connection.to_node.uuid),
-                'direction': connection.direction,
+                # 'direction': connection.direction,
                 'is_active': connection.is_active
             })
         except Exception as e:

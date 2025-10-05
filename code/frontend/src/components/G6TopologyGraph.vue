@@ -167,24 +167,26 @@ const renderTopology = () => {
         lineWidth: 2, // 线宽
         radius: 6, // 圆角
         stroke: node.is_healthy ? '#1890ff' : '#ff7a45', // 描边
-        size: [80, 40], // 调整节点尺寸为更合适的大小
+        size: [40, 40], // 调整节点尺寸为更合适的大小
 
         /* 标签
          * - 标签用于显示节点的文本信息，支持多种样式配置和布局方式。
          */
-        // labelText: node.name, // 节点名称
-        // labelWordWrap: true, // 自动换行
-        // labelMaxWidth: '150%', // 节点宽度的百分比
-        // labelMaxLines: 3, // 最大行数
-        // labelTextOverflow: 'ellipsis', // 超出部分显示省略号
-        // labelPlacement: 'bottom', // 标签位置
-        // labelTextAlign: 'center', // 节点文本水平居中
+        labelText: node.name, // 节点名称
+        labelWordWrap: true, // 自动换行
+        labelMaxWidth: '150%', // 节点宽度的百分比
+        labelMaxLines: 3, // 最大行数
+        labelTextOverflow: 'ellipsis', // 超出部分显示省略号
+        labelPlacement: 'bottom', // 标签位置
+        labelTextAlign: 'center', // 节点文本水平居中
+        labelFill: '#C41D7F', // 节点标签颜色
+        labelFontSize: 12, // 字体大小
 
         /* 图标样式
          * - 节点图标支持三种常见的使用方式：文字图标、图片图标和 IconFont 图标。
          */
-        iconText: node.name,
-        iconFill: '#C41D7F', // 深粉色图标
+        // iconText: node.name,
+        // iconFill: '#C41D7F', // 深粉色图标
 
         /* 连接桩样式
          * - 连接桩是节点上的连接点，用于连接边。
