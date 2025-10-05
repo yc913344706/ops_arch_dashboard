@@ -37,7 +37,7 @@
           <h3>节点信息</h3>
           <el-form :model="selectedNode" label-width="80px" size="small">
             <el-form-item label="名称">
-              <el-input v-model="selectedNode.name" @change="updateNodeInfo" />
+              <el-input v-model="selectedNode.style.iconText" @change="updateNodeInfo" />
             </el-form-item>
             
             <el-form-item label="基础信息">
@@ -73,29 +73,6 @@
         <!-- 操作栏 -->
         <div v-if="selectedNode" class="operation-section">
           <h3>操作</h3>
-          
-          <div class="direction-buttons">
-            <div class="direction-row">
-              <el-button type="default" size="small" @click="createNewNodeInDirection('up')">
-                上方创建
-              </el-button>
-            </div>
-            
-            <div class="direction-row">
-              <el-button type="default" size="small" @click="createNewNodeInDirection('left')">
-                左侧创建
-              </el-button>
-              <el-button type="default" size="small" @click="createNewNodeInDirection('right')">
-                右侧创建
-              </el-button>
-            </div>
-            
-            <div class="direction-row">
-              <el-button type="default" size="small" @click="createNewNodeInDirection('down')">
-                下方创建
-              </el-button>
-            </div>
-          </div>
           
           <!-- 连接管理 -->
           <div class="connection-management">
@@ -313,19 +290,6 @@ const createNewNode = () => {
   showCreateNodeDialog.value = true
 }
 
-// 在特定方向创建新节点
-const createNewNodeInDirection = (direction: string) => {
-  if (!selectedNode.value) {
-    ElMessage.warning('请先选择一个节点')
-    return
-  }
-  
-  createNodeDialogTitle.value = `在${direction === 'up' ? '上' : direction === 'down' ? '下' : direction === 'left' ? '左' : '右'}方创建节点`
-  creatingDirection.value = direction
-  resetNewNodeForm()
-  showCreateNodeDialog.value = true
-}
-
 // 重置新节点表单
 const resetNewNodeForm = () => {
   newNodeForm.value = {
@@ -489,12 +453,15 @@ const createConnection = async () => {
   }
 
   try {
-    const response = await nodeConnectionApi.createConnection({
-      from_node: selectedNode.value.uuid,
+    const request_data = {
+      from_node: selectedNode.value.id,
       to_node: tempConnection.value.to_node,
       direction: tempConnection.value.direction,
       link: selectedDiagram.value
-    })
+    }
+    console.log('request_data:', request_data)
+    console.log('selectedNode:', selectedNode)
+    const response = await nodeConnectionApi.createConnection(request_data)
     
     // 刷新数据
     await loadDiagramData(selectedDiagram.value)

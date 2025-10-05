@@ -52,10 +52,10 @@ const initGraph = async () => {
       'click-select', // 点击选择图元素
       'drag-element', // 拖动元素
       // 'create-edge', // 创建边
-      {
-        type: 'create-edge',
-        trigger: 'click',
-      }
+      // {
+      //   type: 'create-edge',
+      //   trigger: 'click',
+      // }
     ],
     layout: {
       /**

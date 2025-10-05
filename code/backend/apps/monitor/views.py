@@ -357,9 +357,6 @@ class NodeConnectionView(View):
     
     def get(self, request):
         """获取连接列表"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -422,9 +419,6 @@ class NodeConnectionView(View):
     
     def post(self, request):
         """创建连接"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -471,9 +465,6 @@ class NodeConnectionView(View):
     
     def put(self, request):
         """更新连接"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
@@ -507,9 +498,6 @@ class NodeConnectionView(View):
     
     def delete(self, request):
         """删除连接"""
-        user_info, error = check_auth_token(request)
-        if error:
-            return pub_error_response(401, msg=error)
 
         try:
             body = pub_get_request_body(request)
