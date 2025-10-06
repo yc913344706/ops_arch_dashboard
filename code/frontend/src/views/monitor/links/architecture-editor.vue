@@ -38,7 +38,7 @@
               <div class="node-info-panel">
                 <el-form :model="selectedNode" label-width="80px" size="small">
                   <el-form-item label="名称">
-                    <el-input v-model="selectedNode.name" />
+                    <el-input v-model="selectedNode.style.labelText" />
                   </el-form-item>
                   
                   <el-form-item label="基础信息">
@@ -384,7 +384,8 @@ const updateNodeInfo = async () => {
   if (!selectedNode.value || !selectedNode.value.id) return
 
   try {
-    await nodeApi.updateNode(selectedNode.value.id, {
+    await nodeApi.updateNode({
+      uuid: selectedNode.value.id,
       name: selectedNode.value.name,
       basic_info_list: selectedNode.value.basic_info_list.filter((info: any) => info.host || info.port)
     })
@@ -460,7 +461,7 @@ const deleteConnection = async (connectionId: string) => {
       type: 'warning'
     })
     
-    await nodeConnectionApi.deleteConnection(connectionId)
+    await nodeConnectionApi.deleteConnection({ uuid: connectionId })
     
     // 刷新数据
     await loadDiagramData(selectedDiagram.value)
@@ -488,7 +489,7 @@ const deleteSelectedNode = async () => {
       type: 'warning'
     })
     
-    await nodeApi.deleteNode(selectedNode.value.uuid)
+    await nodeApi.deleteNode({ uuid: selectedNode.value.id })
     
     // 清除选中节点
     selectedNode.value = null
@@ -514,7 +515,7 @@ const updateConnectionTarget = async (connectionId: string, newTargetNodeId: str
 
   try {
     // 由于API不直接支持更新连接的to_node，我们先删除旧连接再创建新连接
-    await nodeConnectionApi.deleteConnection(connectionId)
+    await nodeConnectionApi.deleteConnection({ uuid: connectionId })
     
     // 创建新连接
     await nodeConnectionApi.createConnection({

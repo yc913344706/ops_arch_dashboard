@@ -5,24 +5,24 @@ import { apiMap } from '@/config/api'
 const monitorApiMap = {
   // 链路相关API
   getLinks: '/monitor/links/',
-  getLink: (id: string) => `/monitor/links/${id}/`,
+  getLink: '/monitor/links/detail/',
   createLink: '/monitor/links/',
-  updateLink: (id: string) => `/monitor/links/${id}/`,
-  deleteLink: (id: string) => `/monitor/links/${id}/`,
+  updateLink: '/monitor/links/',
+  deleteLink: '/monitor/links/',
   getLinkTopology: `/monitor/link/topology/`,
   
   // 节点相关API
   getNodes: '/monitor/nodes/',
   createNode: '/monitor/nodes/',
-  updateNode: (id: string) => `/monitor/nodes/${id}/`,
-  deleteNode: (id: string) => `/monitor/nodes/${id}/`,
-  getNodeHealth: (id: string) => `/monitor/nodes/${id}/health/`,
+  updateNode: '/monitor/nodes/',
+  deleteNode: '/monitor/nodes/',
+  getNodeHealth: '/monitor/nodes/health/',
   
   // 连接相关API
   getConnections: '/monitor/connections/',
   createConnection: '/monitor/connections/',
-  updateConnection: (id: string) => `/monitor/connections/${id}/`,
-  deleteConnection: (id: string) => `/monitor/connections/${id}/`,
+  updateConnection: '/monitor/connections/',
+  deleteConnection: '/monitor/connections/',
 }
 
 // 链路相关API
@@ -31,16 +31,16 @@ export const linkApi = {
   getLinks: (params?: any) => http.request('get', monitorApiMap.getLinks, { params }),
   
   // 获取单个链路
-  getLink: (id: string) => http.request('get', monitorApiMap.getLink(id)),
+  getLink: (params: any) => http.request('get', monitorApiMap.getLink, { params }),
   
   // 创建链路
   createLink: (data: any) => http.request('post', monitorApiMap.createLink, { data }),
   
   // 更新链路
-  updateLink: (id: string, data: any) => http.request('put', monitorApiMap.updateLink(id), { data }),
+  updateLink: (data: any) => http.request('put', monitorApiMap.updateLink, { data }),
   
   // 删除链路
-  deleteLink: (id: string) => http.request('delete', monitorApiMap.deleteLink(id)),
+  deleteLink: (params: any) => http.request('delete', monitorApiMap.deleteLink, { params }),
   
   // 获取链路拓扑
   getLinkTopology: (params: any) => http.request('get', monitorApiMap.getLinkTopology, { params })
@@ -55,13 +55,13 @@ export const nodeApi = {
   createNode: (data: any) => http.request('post', monitorApiMap.createNode, { data }),
   
   // 更新节点
-  updateNode: (id: string, data: any) => http.request('put', monitorApiMap.updateNode(id), { data }),
+  updateNode: (data: any) => http.request('put', monitorApiMap.updateNode, { data }),
   
   // 删除节点
-  deleteNode: (id: string) => http.request('delete', monitorApiMap.deleteNode(id)),
+  deleteNode: (params: any) => http.request('delete', monitorApiMap.deleteNode, { params }),
   
   // 获取节点健康状态
-  getNodeHealth: (id: string) => http.request('get', monitorApiMap.getNodeHealth(id))
+  getNodeHealth: (params: any) => http.request('get', monitorApiMap.getNodeHealth, { params })
 }
 
 // 连接相关API
@@ -73,8 +73,8 @@ export const nodeConnectionApi = {
   createConnection: (data: any) => http.request('post', monitorApiMap.createConnection, { data }),
   
   // 更新连接
-  updateConnection: (id: string, data: any) => http.request('put', monitorApiMap.updateConnection(id), { data }),
+  updateConnection: (data: any) => http.request('put', monitorApiMap.updateConnection, { data }),
   
   // 删除连接
-  deleteConnection: (id: string) => http.request('delete', monitorApiMap.deleteConnection(id))
+  deleteConnection: (params: any) => http.request('delete', monitorApiMap.deleteConnection, { params })
 }

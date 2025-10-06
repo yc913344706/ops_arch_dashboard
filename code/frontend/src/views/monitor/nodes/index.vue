@@ -321,7 +321,7 @@ const handleDelete = (row: any) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const res = await nodeApi.deleteNode(row.uuid)
+      const res = await nodeApi.deleteNode({ uuid: row.uuid })
       if (res.success) {
         ElMessage.success('删除成功')
         getNodeList()
@@ -364,7 +364,7 @@ const handleSubmit = async () => {
             ElMessage.error('节点信息不完整')
             return
           }
-          res = await nodeApi.updateNode(form.value.uuid, form.value)
+          res = await nodeApi.updateNode({ ...form.value, uuid: form.value.uuid })
         }
         
         if (res.success) {

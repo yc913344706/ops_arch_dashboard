@@ -493,7 +493,7 @@ class NodeConnectionView(View):
             
             connection = NodeConnection.objects.filter(uuid=body['uuid']).first()
             assert connection, '删除的连接不存在'
-            connection.delete()
+            connection.real_delete()
             return pub_success_response()
         except Exception as e:
             color_logger.error(f"删除连接失败: {e.args}")

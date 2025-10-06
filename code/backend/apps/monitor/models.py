@@ -106,7 +106,7 @@ class NodeConnection(BaseModel):
     class Meta:
         verbose_name = '节点连接'
         verbose_name_plural = verbose_name
-        unique_together = [['from_node', 'to_node', 'link']]  # 确保同一架构图内两个节点间只有一个连接
+        unique_together = [['from_node', 'to_node', 'link', 'is_del']]  # 确保同一架构图内两个节点间只有一个连接
 
     def __str__(self):
         # return f"{self.from_node.name} -> {self.to_node.name} ({self.direction})"

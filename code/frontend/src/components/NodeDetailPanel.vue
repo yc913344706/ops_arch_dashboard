@@ -103,7 +103,8 @@ const updateNode = async () => {
   if (!node.value || !node.value.uuid) return
   
   try {
-    const response = await nodeApi.updateNode(node.value.uuid, {
+    const response = await nodeApi.updateNode({
+      uuid: node.value.uuid,
       name: node.value.name,
       basic_info_list: node.value.basic_info_list || [],
       is_active: node.value.is_active
@@ -128,7 +129,7 @@ const deleteNode = async () => {
       type: 'warning'
     })
     
-    await nodeApi.deleteNode(node.value.uuid)
+    await nodeApi.deleteNode({ uuid: node.value.uuid })
     emit('delete', node.value.uuid)
     ElMessage.success('节点删除成功')
   } catch (error) {
