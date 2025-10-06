@@ -54,14 +54,6 @@
           "title": "告警中心",
           "showParent": true
         }
-      },
-      "settings": {
-        "path": "/monitor/settings/index",
-        "name": "MonitorSettings",
-        "meta": {
-          "title": "系统设置",
-          "showParent": true
-        }
       }
     }
   },

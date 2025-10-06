@@ -70,6 +70,7 @@
       </el-col>
     </el-row>
     
+<!--     
     <el-row :gutter="20" class="dashboard-footer">
       <el-col :span="24">
         <el-card class="quick-access-card">
@@ -94,7 +95,7 @@
           </div>
         </el-card>
       </el-col>
-    </el-row>
+    </el-row> -->
   </div>
 </template>
 

@@ -60,7 +60,7 @@
         <el-table-column prop="create_time" label="创建时间" width="180" />
         <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button size="small" @click="viewTopology(scope.row)">拓扑图</el-button>
+            <!-- <el-button size="small" @click="viewTopology(scope.row)">拓扑图</el-button> -->
             <el-button size="small" @click="editLink(scope.row)">编辑</el-button>
             <el-button 
               size="small" 
@@ -231,8 +231,8 @@ const fetchLinks = async () => {
       is_active: filterForm.isActive
     }
     const response = await linkApi.getLinks(params)
-    links.value = response.data.results || []
-    pagination.total = response.data.count || 0
+    links.value = response.data.data || []
+    pagination.total = response.data.all_num || 0
   } catch (error) {
     console.error('获取链路列表失败:', error)
     ElMessage.error('获取链路列表失败')
