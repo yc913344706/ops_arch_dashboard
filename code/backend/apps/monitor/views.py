@@ -1,5 +1,6 @@
 from django.views import View
 from apps.monitor.tasks import check_node_health
+from lib.time_tools import utc_obj_to_time_zone_str
 from lib.request_tool import pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection
@@ -19,7 +20,6 @@ class LinkView(View):
             page = int(body.get('page', 1))
             page_size = int(body.get('page_size', 20))
             search = body.get('search', '')
-            link_type = body.get('link_type', '')
             
             link_list = Link.objects.all()
             
@@ -28,10 +28,6 @@ class LinkView(View):
                 link_list = link_list.filter(
                     Q(name__icontains=search) | Q(description__icontains=search)
                 )
-            
-            # 按类型过滤
-            if link_type:
-                link_list = link_list.filter(link_type=link_type)
             
             # 分页查询
             has_next, next_page, page_list, all_num, result = pub_paging_tool(page, link_list, page_size)
@@ -43,15 +39,14 @@ class LinkView(View):
                     'uuid': str(link.uuid),
                     'name': link.name,
                     'description': link.description,
-                    'link_type': link.link_type,
                     'is_active': link.is_active,
                     'created_by': {
                         'uuid': str(link.created_by.uuid) if link.created_by else None,
                         'username': link.created_by.username if link.created_by else None,
                         'nickname': link.created_by.nickname if link.created_by else None
                     } if link.created_by else None,
-                    'create_time': link.create_time.isoformat() if link.create_time else None,
-                    'update_time': link.update_time.isoformat() if link.update_time else None
+                    'create_time': utc_obj_to_time_zone_str(link.create_time),
+                    'update_time': utc_obj_to_time_zone_str(link.update_time)
                 })
             
             return pub_success_response({
@@ -71,7 +66,7 @@ class LinkView(View):
             body = pub_get_request_body(request)
             user_name = request.user_name
             
-            create_keys = ['name', 'description', 'link_type', 'is_active']
+            create_keys = ['name', 'description', 'is_active']
             create_dict = {key: value for key, value in body.items() if key in create_keys}
             
             # 设置默认值
@@ -89,7 +84,6 @@ class LinkView(View):
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'description': link.description,
-                'link_type': link.link_type,
                 'is_active': link.is_active
             })
         except Exception as e:
@@ -107,7 +101,7 @@ class LinkView(View):
             link = Link.objects.filter(uuid=uuid).first()
             assert link, '更新的架构图不存在'
 
-            update_keys = ['name', 'description', 'link_type', 'is_active']
+            update_keys = ['name', 'description', 'is_active']
             update_dict = {key: value for key, value in body.items() if key in update_keys}
             
             for key, value in update_dict.items():
@@ -118,7 +112,6 @@ class LinkView(View):
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'description': link.description,
-                'link_type': link.link_type,
                 'is_active': link.is_active
             })
         except Exception as e:
@@ -154,7 +147,6 @@ class LinkDetailView(View):
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'description': link.description,
-                'link_type': link.link_type,
                 'is_active': link.is_active,
                 'create_time': link.create_time.isoformat() if link.create_time else None,
                 'update_time': link.update_time.isoformat() if link.update_time else None

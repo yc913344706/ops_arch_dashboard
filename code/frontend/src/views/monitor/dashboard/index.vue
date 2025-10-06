@@ -165,7 +165,7 @@ const formatTime = (time: Date) => {
 const fetchSummaryData = async () => {
   try {
     // 获取架构图数量
-    const linkResponse = await linkApi.getLinks({ link_type: 'architecture' })
+    const linkResponse = await linkApi.getLinks({})
     summary.value.architectureCount = linkResponse.data.count || linkResponse.data.length || 0
     
     // 获取节点统计数据

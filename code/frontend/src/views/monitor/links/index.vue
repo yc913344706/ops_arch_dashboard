@@ -17,15 +17,6 @@
               clearable
               @keyup.enter="fetchLinks" />
           </el-form-item>
-          <el-form-item label="链路类型">
-            <el-select v-model="filterForm.type" placeholder="选择链路类型" clearable>
-              <el-option label="域名链路" value="domain" />
-              <el-option label="网络链路" value="network" />
-              <el-option label="流量链路" value="traffic" />
-              <el-option label="应用链路" value="application" />
-              <el-option label="自定义链路" value="custom" />
-            </el-select>
-          </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="filterForm.isActive" placeholder="选择状态" clearable>
               <el-option label="启用" :value="true" />
@@ -42,13 +33,6 @@
       <el-table :data="links" v-loading="loading">
         <el-table-column prop="name" label="链路名称" width="200" />
         <el-table-column prop="description" label="描述" show-overflow-tooltip />
-        <el-table-column label="链路类型" width="120">
-          <template #default="scope">
-            <el-tag :type="getLinkTypeTagType(scope.row.link_type)">
-              {{ getLinkTypeText(scope.row.link_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="scope">
             <el-tag :type="scope.row.is_active ? 'success' : 'info'">
@@ -106,15 +90,6 @@
       >
         <el-form-item label="链路名称" prop="name">
           <el-input v-model="linkForm.name" placeholder="请输入链路名称" />
-        </el-form-item>
-        <el-form-item label="链路类型" prop="link_type">
-          <el-select v-model="linkForm.link_type" placeholder="请选择链路类型" style="width: 100%">
-            <el-option label="域名链路" value="domain" />
-            <el-option label="网络链路" value="network" />
-            <el-option label="流量链路" value="traffic" />
-            <el-option label="应用链路" value="application" />
-            <el-option label="自定义链路" value="custom" />
-          </el-select>
         </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input 
@@ -174,7 +149,6 @@ const linkForm = reactive({
   uuid: '',
   name: '',
   description: '',
-  link_type: '',
   is_active: true
 })
 
@@ -184,9 +158,7 @@ const linkFormRules = {
     { required: true, message: '请输入链路名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ],
-  link_type: [
-    { required: true, message: '请选择链路类型', trigger: 'change' }
-  ]
+
 }
 
 // 表单引用
@@ -195,29 +167,7 @@ const linkFormRef = ref()
 // 计算属性
 const dialogTitle = computed(() => isEdit.value ? '编辑链路' : '新建链路')
 
-// 获取链路类型文本
-const getLinkTypeText = (type: string) => {
-  const types: Record<string, string> = {
-    domain: '域名链路',
-    network: '网络链路',
-    traffic: '流量链路',
-    application: '应用链路',
-    custom: '自定义链路'
-  }
-  return types[type] || type
-}
 
-// 获取链路类型标签类型
-const getLinkTypeTagType = (type: string) => {
-  const types: Record<string, string> = {
-    domain: 'primary',
-    network: 'success',
-    traffic: 'warning',
-    application: 'danger',
-    custom: 'info'
-  }
-  return types[type] || 'default'
-}
 
 // 获取链路列表
 const fetchLinks = async () => {
@@ -227,7 +177,7 @@ const fetchLinks = async () => {
       page: pagination.currentPage,
       size: pagination.pageSize,
       search: filterForm.name,
-      link_type: filterForm.type,
+
       is_active: filterForm.isActive
     }
     const response = await linkApi.getLinks(params)
@@ -340,7 +290,6 @@ const resetLinkForm = () => {
   linkForm.uuid = ''
   linkForm.name = ''
   linkForm.description = ''
-  linkForm.link_type = ''
   linkForm.is_active = true
 }
 
@@ -352,10 +301,10 @@ const submitLinkForm = async () => {
     if (valid) {
       try {
         if (isEdit.value) {
-          await linkApi.updateLink(linkForm.uuid, {
+          await linkApi.updateLink({
+            uuid: linkForm.uuid,
             name: linkForm.name,
             description: linkForm.description,
-            link_type: linkForm.link_type,
             is_active: linkForm.is_active
           })
           ElMessage.success('更新成功')
@@ -363,7 +312,6 @@ const submitLinkForm = async () => {
           await linkApi.createLink({
             name: linkForm.name,
             description: linkForm.description,
-            link_type: linkForm.link_type,
             is_active: linkForm.is_active
           })
           ElMessage.success('创建成功')

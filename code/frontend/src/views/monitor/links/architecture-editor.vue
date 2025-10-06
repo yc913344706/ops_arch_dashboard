@@ -253,9 +253,7 @@ const topologyGraphRef = ref()
 // 获取架构图列表
 const fetchDiagrams = async () => {
   try {
-    const response = await linkApi.getLinks({
-      link_type: 'architecture'
-    })
+    const response = await linkApi.getLinks({})
     diagrams.value = response.data.data || response.data.data || []
     
     // 如果有架构图，选择第一个

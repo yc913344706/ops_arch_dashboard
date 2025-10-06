@@ -10,17 +10,7 @@ class Link(BaseModel):
     """
     name = models.CharField(max_length=200, verbose_name='链路名称')
     description = models.TextField(blank=True, null=True, verbose_name='链路描述')
-    link_type = models.CharField(
-        max_length=50,
-        choices=[
-            ('domain', '域名链路'),
-            ('network', '网络链路'),
-            ('traffic', '流量链路'),
-            ('application', '应用链路'),
-            ('custom', '自定义链路')
-        ],
-        verbose_name='链路类型'
-    )
+
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     created_by = models.ForeignKey(
         User,

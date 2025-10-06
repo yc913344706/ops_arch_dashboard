@@ -261,7 +261,7 @@ const getNodeList = async () => {
 // 获取架构图列表
 const getDiagramList = async () => {
   try {
-    const res = await linkApi.getLinks({ link_type: 'architecture' })
+    const res = await linkApi.getLinks({})
     if (res.success) {
       diagrams.value = res.data.results || []
     } else {
