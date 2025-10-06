@@ -38,7 +38,7 @@
               <div class="node-info-panel">
                 <el-form :model="selectedNode" label-width="80px" size="small">
                   <el-form-item label="名称">
-                    <el-input v-model="selectedNode.style.iconText" @change="updateNodeInfo" />
+                    <el-input v-model="selectedNode.style.labelText" @change="updateNodeInfo" />
                   </el-form-item>
                   
                   <el-form-item label="基础信息">
@@ -83,7 +83,7 @@
                       :key="conn.uuid" 
                       class="connection-item"
                     >
-                      <span>{{ conn.direction }} -> {{ getNodeName(conn.to_node) }}</span>
+                      <span>{{ getNodeName(conn.to_node) }}</span>
                       <el-button 
                         size="small" 
                         type="danger" 
@@ -195,6 +195,7 @@
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
+import { G6_NODE_HALF_WIDTH, G6_NODE_HALF_HEIGHT } from '@/constants/g6Constants'
 
 // 引入组件
 const G6TopologyGraph = defineAsyncComponent(() => import('@/components/G6TopologyGraph.vue'))
@@ -215,10 +216,8 @@ const newNodeForm = ref({
   basic_info_list: [{}] // 默认添加一个空的信息项
 })
 const tempConnection = ref({
-  // direction: '',
   to_node: ''
 })
-const creatingDirection = ref<string | null>(null)
 const topologyGraphRef = ref()
 
 // 获取架构图列表
@@ -250,9 +249,7 @@ const loadDiagramData = async (diagramId: string) => {
     const edges = connections.map(conn => ({
       id: conn.uuid,
       source: conn.from_node,
-      target: conn.to_node,
-      // label: conn.direction,
-      // direction: conn.direction
+      target: conn.to_node
     }))
     
     topologyData.value = {
@@ -288,7 +285,6 @@ const handleNodeClick = (node: any) => {
 // 创建新节点 - 通用方法
 const createNewNode = () => {
   createNodeDialogTitle.value = '新建节点'
-  creatingDirection.value = null
   resetNewNodeForm()
   showCreateNodeDialog.value = true
 }
@@ -323,38 +319,14 @@ const confirmCreateNode = async () => {
   }
 
   try {
-    // 计算新节点的位置 - 居中或相对于选中节点
+    // 计算新节点的位置 - 居中创建
     let position_x = 0
     let position_y = 0
     
-    if (creatingDirection.value && selectedNode.value) {
-      // 在特定方向创建节点
-      const offset = 120 // 节点间距
-      switch (creatingDirection.value) {
-        case 'up':
-          position_x = selectedNode.value.position_x || 0
-          position_y = (selectedNode.value.position_y || 0) - offset
-          break
-        case 'down':
-          position_x = selectedNode.value.position_x || 0
-          position_y = (selectedNode.value.position_y || 0) + offset
-          break
-        case 'left':
-          position_x = (selectedNode.value.position_x || 0) - offset
-          position_y = selectedNode.value.position_y || 0
-          break
-        case 'right':
-          position_x = (selectedNode.value.position_x || 0) + offset
-          position_y = selectedNode.value.position_y || 0
-          break
-      }
-    } else {
-      // 居中创建
-      const container = document.querySelector('.canvas-container')
-      if (container) {
-        position_x = container.clientWidth / 2 - 40 // 40是节点宽度的一半
-        position_y = container.clientHeight / 2 - 20 // 20是节点高度的一半
-      }
+    const container = document.querySelector('.canvas-container')
+    if (container) {
+      position_x = container.clientWidth / 2 - G6_NODE_HALF_WIDTH // 节点宽度的一半
+      position_y = container.clientHeight / 2 - G6_NODE_HALF_HEIGHT // 节点高度的一半
     }
 
     const newNode = await nodeApi.createNode({
@@ -364,16 +336,6 @@ const confirmCreateNode = async () => {
       position_x: Math.round(position_x),
       position_y: Math.round(position_y)
     })
-    
-    // 如果是在特定方向创建的，还需要创建连接
-    if (creatingDirection.value && selectedNode.value) {
-      await nodeConnectionApi.createConnection({
-        from_node: selectedNode.value.uuid,
-        to_node: newNode.uuid,
-        // direction: creatingDirection.value,
-        link: selectedDiagram.value
-      })
-    }
 
     // 刷新数据
     await loadDiagramData(selectedDiagram.value)
@@ -450,7 +412,6 @@ const getNodeName = (nodeId: string) => {
 
 // 创建连接
 const createConnection = async () => {
-  // if (!selectedNode.value || !tempConnection.value.direction || !tempConnection.value.to_node) {
   if (!selectedNode.value || !tempConnection.value.to_node) {
     ElMessage.error('请填写完整的连接信息')
     return
@@ -460,7 +421,6 @@ const createConnection = async () => {
     const request_data = {
       from_node: selectedNode.value.id,
       to_node: tempConnection.value.to_node,
-      // direction: tempConnection.value.direction,
       link: selectedDiagram.value
     }
     console.log('request_data:', request_data)
@@ -472,7 +432,6 @@ const createConnection = async () => {
     
     // 重置表单
     tempConnection.value = { 
-      // direction: '', 
       to_node: '' }
     
     ElMessage.success('连接创建成功')
@@ -571,19 +530,7 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
-.direction-buttons {
-  margin-bottom: 20px;
-}
 
-.direction-row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.direction-row .el-button {
-  margin: 0 5px;
-}
 
 .connection-management {
   border-top: 1px solid #e4e7ed;

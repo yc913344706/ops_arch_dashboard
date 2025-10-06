@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as G6 from '@antv/g6'
+import { G6_NODE_SIZE } from '@/constants/g6Constants'
 
 // 定义组件属性
 const props = defineProps<{
@@ -73,7 +74,7 @@ const initGraph = async () => {
       nodesep: 30,
       // 层间距（px）。在rankdir 为 TB 或 BT 时是竖直方向相邻层间距；在rankdir 为 LR 或 RL 时代表水平方向相邻层间距
       ranksep: 50,
-      nodeSize: [80, 40],
+      // nodeSize: G6_NODE_SIZE,
     },
     node: {},
     edge: {
@@ -96,9 +97,10 @@ const initGraph = async () => {
       onClick: (value) => {
         // 处理按钮点击事件
         if (value === 'zoom-in') {
-          graphInstance.zoomTo(1.1);
+          // https://g6.antv.antgroup.com/api/viewport#graphzoombyratio-animation-origin
+          graphInstance.zoomBy(1.2);
         } else if (value === 'zoom-out') {
-          graphInstance.zoomTo(0.9);
+          graphInstance.zoomBy(0.8);
         } else if (value === 'auto-fit') {
           graphInstance.fitView();
         }
@@ -167,7 +169,7 @@ const renderTopology = () => {
         lineWidth: 2, // 线宽
         radius: 6, // 圆角
         stroke: node.is_healthy ? '#1890ff' : '#ff7a45', // 描边
-        size: [40, 40], // 调整节点尺寸为更合适的大小
+        size: G6_NODE_SIZE, // 调整节点尺寸为更合适的大小
 
         /* 标签
          * - 标签用于显示节点的文本信息，支持多种样式配置和布局方式。
