@@ -288,10 +288,10 @@ const renderTopology = () => {
     // render: https://g6.antv.antgroup.com/api/render#graphrender
     graphInstance.render()
     
-    // 确保标签正确显示
+    // 确保标签正确显示并居中适应视图
     setTimeout(() => {
       if (graphInstance) {
-        graphInstance.fitView([20, 20])
+        graphInstance.fitCenter();
       }
     }, 100)
   }

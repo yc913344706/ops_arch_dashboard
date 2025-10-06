@@ -20,9 +20,11 @@ class LinkView(View):
             page = int(body.get('page', 1))
             page_size = int(body.get('page_size', 20))
             search = body.get('search', '')
-            is_active = pub_bool_check(body.get('is_active', True))
             
-            link_list = Link.objects.filter(is_active=is_active)
+            link_list = Link.objects.all()
+            if body.get('is_active'):
+                is_active = pub_bool_check(body.get('is_active', True))
+                link_list = link_list.filter(is_active=is_active)
             
             # 添加搜索功能
             if search:

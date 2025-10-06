@@ -5,10 +5,12 @@
         v-model="selectedDiagram" 
         placeholder="选择架构图" 
         @change="onDiagramChange"
+        filterable
+        :filter-method="filterDiagrams"
         style="width: 200px; margin-right: 10px;"
       >
         <el-option
-          v-for="diagram in diagrams"
+          v-for="diagram in filteredDiagrams"
           :key="diagram.uuid"
           :label="diagram.name"
           :value="diagram.uuid"
@@ -227,12 +229,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
 import { G6_NODE_HALF_WIDTH, G6_NODE_HALF_HEIGHT } from '@/constants/g6Constants'
 
+defineOptions({
+  name: "ArchitectureEditor"
+});
+
 // 引入组件
 const G6TopologyGraph = defineAsyncComponent(() => import('@/components/G6TopologyGraph.vue'))
 
 // 响应式数据
 const selectedDiagram = ref('')
 const diagrams = ref<any[]>([])
+const filteredDiagrams = ref<any[]>([])
 const topologyData = ref({
   nodes: [],
   edges: [],
@@ -253,8 +260,9 @@ const topologyGraphRef = ref()
 // 获取架构图列表
 const fetchDiagrams = async () => {
   try {
-    const response = await linkApi.getLinks({})
+    const response = await linkApi.getLinks({is_active: true})
     diagrams.value = response.data.data || response.data.data || []
+    filteredDiagrams.value = diagrams.value  // 初始化过滤后的列表
     
     // 如果有架构图，选择第一个
     if (diagrams.value.length > 0 && !selectedDiagram.value) {
@@ -264,6 +272,17 @@ const fetchDiagrams = async () => {
   } catch (error) {
     console.error('获取架构图列表失败:', error)
     ElMessage.error('获取架构图列表失败')
+  }
+}
+
+// 过滤架构图
+const filterDiagrams = (value: string) => {
+  if (!value) {
+    filteredDiagrams.value = diagrams.value
+  } else {
+    filteredDiagrams.value = diagrams.value.filter(diagram => 
+      diagram.name.toLowerCase().includes(value.toLowerCase())
+    )
   }
 }
 
