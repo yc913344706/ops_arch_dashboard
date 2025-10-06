@@ -341,7 +341,7 @@ const confirmCreateNode = async () => {
 
     const newNode = await nodeApi.createNode({
       name: newNodeForm.value.name,
-      basic_info_list: newNodeForm.value.basic_info_list.filter(info => info.host || info.port),
+      basic_info_list: newNodeForm.value.basic_info_list?.filter(info => info.host || info.port) || [],
       link: selectedDiagram.value,
       position_x: Math.round(position_x),
       position_y: Math.round(position_y)
@@ -386,8 +386,8 @@ const updateNodeInfo = async () => {
   try {
     await nodeApi.updateNode({
       uuid: selectedNode.value.id,
-      name: selectedNode.value.name,
-      basic_info_list: selectedNode.value.basic_info_list.filter((info: any) => info.host || info.port)
+      name: selectedNode.value.style.labelText,
+      basic_info_list: selectedNode.value.basic_info_list?.filter((info: any) => info.host || info.port) || []
     })
     
     // 更新本地数据
@@ -397,6 +397,7 @@ const updateNodeInfo = async () => {
     }
     
     ElMessage.success('节点信息更新成功')
+    await loadDiagramData(selectedDiagram.value)
   } catch (error) {
     console.error('更新节点信息失败:', error)
     ElMessage.error('更新节点信息失败')

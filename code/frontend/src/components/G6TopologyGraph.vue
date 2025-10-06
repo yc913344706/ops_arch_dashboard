@@ -144,6 +144,9 @@ const renderTopology = () => {
     console.log('Processing node:', node)
     // node 属性： https://g6.antv.antgroup.com/manual/element/node/base-node#nodeoptions
     return {
+      id: node.uuid || node.id,
+      basic_info_list: node.basic_info_list || [],
+
       /**
        * 节点通用配置项： https://g6.antv.antgroup.com/manual/element/node/base-node
        *     type: 'circle', // 节点类型
@@ -155,7 +158,6 @@ const renderTopology = () => {
        * rect 节点： https://g6.antv.antgroup.com/manual/element/node/rect
        */
       type: 'rect',
-      id: node.uuid || node.id,
       // x: node.position_x,
       // y: node.position_y,
       // isHealthy: node.is_healthy,
