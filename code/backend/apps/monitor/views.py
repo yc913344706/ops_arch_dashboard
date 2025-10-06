@@ -3,10 +3,11 @@ from apps.monitor.tasks import check_node_health
 from lib.time_tools import utc_obj_to_time_zone_str
 from lib.request_tool import pub_bool_check, pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
-from .models import Link, Node, NodeHealth, NodeConnection
+from .models import Link, Node, NodeHealth, NodeConnection, Alert
 from lib.log import color_logger
 from apps.myAuth.token_utils import TokenManager
 from django.db.models import Q
+from django.utils import timezone
 
 
 class LinkView(View):
@@ -537,3 +538,279 @@ class NodeHealthView(View):
         except Exception as e:
             color_logger.error(f"获取节点健康状态失败: {e.args}")
             return pub_error_response(f"获取节点健康状态失败: {e.args}")
+
+
+class AlertView(View):
+    """告警相关接口"""
+    
+    def get(self, request):
+        """获取告警列表"""
+        try:
+            body = pub_get_request_body(request)
+            
+            page = int(body.get('page', 1))
+            page_size = int(body.get('page_size', 20))
+            search = body.get('search', '')
+            status = body.get('status', '')
+            severity = body.get('severity', '')
+            node_id = body.get('node_id', '')
+            alert_type = body.get('alert_type', '')
+            
+            alert_list = Alert.objects.all()
+            
+            # 添加搜索功能
+            if search:
+                alert_list = alert_list.filter(
+                    Q(title__icontains=search) | Q(description__icontains=search)
+                )
+            
+            # 按状态过滤
+            if status:
+                alert_list = alert_list.filter(status=status)
+            
+            # 按严重程度过滤
+            if severity:
+                alert_list = alert_list.filter(severity=severity)
+            
+            # 按节点ID过滤
+            if node_id:
+                alert_list = alert_list.filter(node_id=node_id)
+            
+            # 按告警类型过滤
+            if alert_type:
+                alert_list = alert_list.filter(alert_type=alert_type)
+            
+            # 分页查询
+            has_next, next_page, page_list, all_num, result = pub_paging_tool(page, alert_list, page_size)
+            
+            # 格式化返回数据
+            result_data = []
+            for alert in result:
+                result_data.append({
+                    'uuid': str(alert.uuid),
+                    'node_id': alert.node_id,
+                    'alert_type': alert.alert_type,
+                    'alert_subtype': alert.alert_subtype,
+                    'title': alert.title,
+                    'description': alert.description,
+                    'status': alert.status,
+                    'severity': alert.severity,
+                    'first_occurred': utc_obj_to_time_zone_str(alert.first_occurred),
+                    'last_occurred': utc_obj_to_time_zone_str(alert.last_occurred),
+                    'resolved_at': utc_obj_to_time_zone_str(alert.resolved_at) if alert.resolved_at else None,
+                    'acknowledged_at': utc_obj_to_time_zone_str(alert.acknowledged_at) if alert.acknowledged_at else None,
+                    'created_by': {
+                        'uuid': str(alert.created_by.uuid) if alert.created_by else None,
+                        'username': alert.created_by.username if alert.created_by else None,
+                        'nickname': alert.created_by.nickname if alert.created_by else None
+                    } if alert.created_by else None,
+                    'acknowledged_by': {
+                        'uuid': str(alert.acknowledged_by.uuid) if alert.acknowledged_by else None,
+                        'username': alert.acknowledged_by.username if alert.acknowledged_by else None,
+                        'nickname': alert.acknowledged_by.nickname if alert.acknowledged_by else None
+                    } if alert.acknowledged_by else None
+                })
+            
+            return pub_success_response({
+                'has_next': has_next,
+                'next_page': next_page,
+                'all_num': all_num,
+                'data': result_data
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取告警列表失败: {e.args}")
+            return pub_error_response(f"获取告警列表失败: {e.args}")
+    
+    def post(self, request):
+        """创建或更新告警（如果相同的告警已存在则更新）"""
+        try:
+            body = pub_get_request_body(request)
+            
+            # 检查是否已存在相同告警
+            existing_alert = Alert.objects.filter(
+                node_id=body.get('node_id'),
+                alert_type=body.get('alert_type', ''),
+                alert_subtype=body.get('alert_subtype', ''),
+                status='OPEN'
+            ).first()
+            
+            if existing_alert:
+                # 更新已存在告警的最后发生时间
+                existing_alert.last_occurred = timezone.now()
+                existing_alert.description = body.get('description', existing_alert.description)
+                existing_alert.severity = body.get('severity', existing_alert.severity)
+                existing_alert.save()
+                
+                return pub_success_response({
+                    'uuid': str(existing_alert.uuid),
+                    'node_id': existing_alert.node_id,
+                    'alert_type': existing_alert.alert_type,
+                    'alert_subtype': existing_alert.alert_subtype,
+                    'title': existing_alert.title,
+                    'description': existing_alert.description,
+                    'status': existing_alert.status,
+                    'severity': existing_alert.severity,
+                    'first_occurred': utc_obj_to_time_zone_str(existing_alert.first_occurred),
+                    'last_occurred': utc_obj_to_time_zone_str(existing_alert.last_occurred)
+                })
+            else:
+                # 创建新告警
+                create_keys = ['node_id', 'alert_type', 'alert_subtype', 'title', 'description', 'severity']
+                create_dict = {key: value for key, value in body.items() if key in create_keys}
+                
+                # 设置默认值
+                create_dict['severity'] = body.get('severity', 'MEDIUM')
+                create_dict['status'] = 'OPEN'
+                
+                # 关联创建者（如果需要）
+                user_name = getattr(request, 'user_name', None)
+                if user_name:
+                    from apps.user.models import User
+                    user = User.objects.filter(username=user_name).first()
+                    if user:
+                        create_dict['created_by'] = user
+                
+                alert = Alert.objects.create(**create_dict)
+                
+                return pub_success_response({
+                    'uuid': str(alert.uuid),
+                    'node_id': alert.node_id,
+                    'alert_type': alert.alert_type,
+                    'alert_subtype': alert.alert_subtype,
+                    'title': alert.title,
+                    'description': alert.description,
+                    'status': alert.status,
+                    'severity': alert.severity
+                })
+        except Exception as e:
+            color_logger.error(f"创建告警失败: {e.args}")
+            return pub_error_response(f"创建告警失败: {e.args}")
+    
+    def put(self, request):
+        """更新告警状态（确认或关闭）"""
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            alert = Alert.objects.filter(uuid=uuid).first()
+            assert alert, '告警不存在'
+
+            # 更新状态
+            new_status = body.get('status')
+            if new_status in ['CLOSED', 'ACKNOWLEDGED']:
+                if new_status == 'CLOSED':
+                    alert.status = 'CLOSED'
+                    alert.resolved_at = timezone.now()
+                elif new_status == 'ACKNOWLEDGED':
+                    alert.status = 'ACKNOWLEDGED'
+                    alert.acknowledged_at = timezone.now()
+                    
+                    # 关联确认人
+                    user_name = getattr(request, 'user_name', None)
+                    if user_name:
+                        from apps.user.models import User
+                        user = User.objects.filter(username=user_name).first()
+                        if user:
+                            alert.acknowledged_by = user
+
+                alert.save()
+
+            return pub_success_response({
+                'uuid': str(alert.uuid),
+                'status': alert.status
+            })
+        except Exception as e:
+            color_logger.error(f"更新告警失败: {e.args}")
+            return pub_error_response(f"更新告警失败: {e.args}")
+    
+    def delete(self, request):
+        """删除告警"""
+        try:
+            body = pub_get_request_body(request)
+            
+            alert = Alert.objects.filter(uuid=body['uuid']).first()
+            assert alert, '告警不存在'
+            alert.delete()
+            return pub_success_response()
+        except Exception as e:
+            color_logger.error(f"删除告警失败: {e.args}")
+            return pub_error_response(f"删除告警失败: {e.args}")
+
+
+class AlertDetailView(View):
+    """单个告警详情接口"""
+    
+    def get(self, request):
+        """获取单个告警详情"""
+        try:
+            body = pub_get_request_body(request)
+            alert_uuid = body.get('uuid')
+            color_logger.debug(f"获取单个告警详情: {alert_uuid}")
+            alert = Alert.objects.get(uuid=alert_uuid)
+            
+            return pub_success_response({
+                'uuid': str(alert.uuid),
+                'node_id': alert.node_id,
+                'alert_type': alert.alert_type,
+                'alert_subtype': alert.alert_subtype,
+                'title': alert.title,
+                'description': alert.description,
+                'status': alert.status,
+                'severity': alert.severity,
+                'first_occurred': alert.first_occurred.isoformat() if alert.first_occurred else None,
+                'last_occurred': alert.last_occurred.isoformat() if alert.last_occurred else None,
+                'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None,
+                'acknowledged_at': alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+                'created_by': {
+                    'uuid': str(alert.created_by.uuid) if alert.created_by else None,
+                    'username': alert.created_by.username if alert.created_by else None,
+                    'nickname': alert.created_by.nickname if alert.created_by else None
+                } if alert.created_by else None,
+                'acknowledged_by': {
+                    'uuid': str(alert.acknowledged_by.uuid) if alert.acknowledged_by else None,
+                    'username': alert.acknowledged_by.username if alert.acknowledged_by else None,
+                    'nickname': alert.acknowledged_by.nickname if alert.acknowledged_by else None
+                } if alert.acknowledged_by else None
+            })
+        except Alert.DoesNotExist:
+            return pub_error_response("告警不存在")
+        except Exception as e:
+            color_logger.error(f"获取告警详情失败: {e.args}")
+            return pub_error_response(f"获取告警详情失败: {e.args}")
+
+
+class AlertTypesView(View):
+    """告警类型接口"""
+    
+    def get(self, request):
+        """获取所有告警类型"""
+        try:
+            # 从数据库获取所有唯一的告警类型
+            distinct_alert_types = Alert.objects.values_list('alert_type', flat=True).distinct()
+            
+            # 返回告警类型及其描述
+            alert_types_with_desc = []
+            for alert_type in distinct_alert_types:
+                # 创建一个带描述的映射
+                desc_map = {
+                    'HEALTH_CHECK_FAILED': '健康检查失败',
+                    'RESPONSE_TIME_SLOW': '响应时间过慢',
+                    'SERVICE_UNAVAILABLE': '服务不可用',
+                    'CONNECTION_TIMEOUT': '连接超时',
+                    'PARTIAL_HEALTH_CHECK_FAILED': '部分健康检查失败'
+                }
+                description = desc_map.get(alert_type, alert_type)
+                alert_types_with_desc.append({
+                    'value': alert_type,
+                    'label': description
+                })
+            
+            return pub_success_response({
+                'alert_types': alert_types_with_desc
+            })
+        except Exception as e:
+            color_logger.error(f"获取告警类型失败: {e.args}")
+            return pub_error_response(f"获取告警类型失败: {e.args}")

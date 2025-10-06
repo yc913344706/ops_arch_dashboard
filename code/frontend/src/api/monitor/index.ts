@@ -23,6 +23,14 @@ const monitorApiMap = {
   createConnection: '/monitor/connections/',
   updateConnection: '/monitor/connections/',
   deleteConnection: '/monitor/connections/',
+  
+  // 告警相关API
+  getAlerts: '/monitor/alerts/',
+  getAlert: '/monitor/alert/',
+  createAlert: '/monitor/alerts/',
+  updateAlert: '/monitor/alert/',
+  deleteAlert: '/monitor/alert/',
+  getAlertTypes: '/monitor/alert-types/',
 }
 
 // 链路相关API
@@ -77,4 +85,25 @@ export const nodeConnectionApi = {
   
   // 删除连接
   deleteConnection: (params: any) => http.request('delete', monitorApiMap.deleteConnection, { params })
+}
+
+// 告警相关API
+export const alertApi = {
+  // 获取告警列表
+  getAlerts: (params?: any) => http.request('get', monitorApiMap.getAlerts, { params }),
+  
+  // 获取单个告警详情
+  getAlert: (params: any) => http.request('get', monitorApiMap.getAlert, { params }),
+  
+  // 创建告警
+  createAlert: (data: any) => http.request('post', monitorApiMap.createAlert, { data }),
+  
+  // 更新告警
+  updateAlert: (data: any) => http.request('put', monitorApiMap.updateAlert, { data }),
+  
+  // 删除告警
+  deleteAlert: (params: any) => http.request('delete', monitorApiMap.deleteAlert, { params }),
+  
+  // 获取告警类型
+  getAlertTypes: (params?: any) => http.request('get', monitorApiMap.getAlertTypes, { params })
 }

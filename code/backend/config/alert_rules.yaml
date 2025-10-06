@@ -1,0 +1,58 @@
+# 告警规则配置文件
+alerts:
+  # 响应时间告警规则
+  response_time_slow:
+    enabled: true
+    description: "响应时间过慢告警"
+    condition: "avg_response_time > 1000"
+    duration: "1m"  # 持续时间阈值
+    severity: "MEDIUM"
+    message: "节点 {node_name} 平均响应时间为 {avg_response_time}ms，超过阈值 {threshold}ms"
+    check_interval: "10m"  # 检查间隔
+    data_source: "node_health"  # 数据源
+    aggregation: "avg"  # 聚合方式：avg, max, min, sum
+    time_window: "5m"  # 时间窗口
+
+  # 健康状态告警规则
+  health_check_failed:
+    enabled: true
+    description: "健康检查失败告警"
+    condition: "healthy_status == 'red'"
+    duration: "1m"
+    severity: "HIGH"
+    message: "节点 {node_name} 完全不可用"
+    check_interval: "5m"
+    data_source: "node_health"
+
+  # 部分健康检查失败告警
+  partial_health_check_failed:
+    enabled: true
+    description: "部分健康检查失败告警"
+    condition: "healthy_status == 'yellow'"
+    duration: "1m"
+    severity: "MEDIUM"
+    message: "节点 {node_name} 部分不可用"
+    check_interval: "5m"
+    data_source: "node_health"
+
+  # 连接超时告警
+  connection_timeout:
+    enabled: true
+    description: "连接超时告警"
+    condition: "probe_type == 'port' and error_type == 'timeout'"
+    duration: "1m"
+    severity: "HIGH"
+    message: "节点 {node_name} 端口连接超时"
+    check_interval: "5m"
+    data_source: "node_health"
+
+  # 服务不可用告警
+  service_unavailable:
+    enabled: true
+    description: "服务不可用告警"
+    condition: "probe_type == 'http' and status_code >= 500"
+    duration: "1m"
+    severity: "HIGH"
+    message: "节点 {node_name} HTTP服务不可用，状态码: {status_code}"
+    check_interval: "5m"
+    data_source: "node_health"

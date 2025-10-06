@@ -1,8 +1,11 @@
 from celery import shared_task
 from django.utils import timezone
-from .models import Node, NodeHealth
+from .models import Node, NodeHealth, Alert
 from .probes.factory import get_probe_instance
 from lib.log import color_logger
+from .alert_config_parser import alert_config_parser, AlertRule
+import operator
+from datetime import timedelta
 
 @shared_task
 def check_node_health(node_uuid):
@@ -98,13 +101,17 @@ def check_node_health(node_uuid):
         node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
         
         # Create health record
-        NodeHealth.objects.create(
+        health_record = NodeHealth.objects.create(
             node=node,
             healthy_status=healthy_status,
             response_time=avg_response_time,
             probe_result={'details': updated_basic_info_list},
             error_message=None if healthy_status == 'green' else 'One or more checks failed'
         )
+        
+        # 使用配置驱动的方式处理告警，而不是硬编码逻辑
+        # 通过定期任务 check_all_alerts 来处理告警
+        # 这样可以更灵活地管理告警规则
         
         color_logger.info(f"Node {node.name} health check completed: {healthy_status}")
         
@@ -144,3 +151,376 @@ def cleanup_health_records():
     deleted_count = NodeHealth.objects.filter(create_time__lt=cutoff_time).delete()
     
     color_logger.info(f"Cleaned up {deleted_count[0]} old health records")
+
+
+def create_or_update_alert(node, alert_type, alert_subtype, title, description, severity='MEDIUM'):
+    """
+    创建或更新告警
+    如果相同的告警已存在且为OPEN状态，则更新最后发生时间
+    """
+    try:
+        # 检查是否已存在相同告警
+        existing_alert = Alert.objects.filter(
+            node_id=str(node.uuid),
+            alert_type=alert_type,
+            alert_subtype=alert_subtype,
+            status='OPEN'
+        ).first()
+        
+        if existing_alert:
+            # 更新已存在告警的最后发生时间
+            existing_alert.last_occurred = timezone.now()
+            existing_alert.description = description
+            existing_alert.severity = severity
+            existing_alert.save()
+            color_logger.info(f"Updated existing alert for node {node.name}: {title}")
+            return existing_alert
+        else:
+            # 创建新告警
+            alert = Alert.objects.create(
+                node_id=str(node.uuid),
+                alert_type=alert_type,
+                alert_subtype=alert_subtype,
+                title=title,
+                description=description,
+                severity=severity,
+                status='OPEN'
+            )
+            color_logger.info(f"Created new alert for node {node.name}: {title}")
+            return alert
+    except Exception as e:
+        color_logger.error(f"Error creating or updating alert for node {node.name}: {str(e)}")
+
+
+def evaluate_condition(condition_str: str, context: dict) -> bool:
+    """
+    评估告警条件表达式
+    """
+    try:
+        # 使用更安全的条件评估方法
+        # 定义安全的操作符
+        ops = {
+            '==': operator.eq,
+            '!=': operator.ne,
+            '<': operator.lt,
+            '<=': operator.le,
+            '>': operator.gt,
+            '>=': operator.ge,
+            'and': lambda x, y: x and y,
+            'or': lambda x, y: x or y,
+        }
+        
+        # 从条件字符串解析操作符和变量
+        # 对于 "avg_response_time > 1000" 这样的条件
+        if ' and ' in condition_str or ' or ' in condition_str:
+            # 处理多个条件
+            sub_conditions = []
+            if ' and ' in condition_str:
+                sub_conditions = condition_str.split(' and ')
+                op_func = ops['and']
+            elif ' or ' in condition_str:
+                sub_conditions = condition_str.split(' or ')
+                op_func = ops['or']
+            
+            results = []
+            for sub_condition in sub_conditions:
+                sub_result = evaluate_single_condition(sub_condition.strip(), context, ops)
+                results.append(sub_result)
+            
+            # 对于 and 连接的条件，所有子条件都必须为真
+            # 对于 or 连接的条件，至少一个子条件为真
+            if ' and ' in condition_str:
+                return all(results)
+            else:
+                return any(results)
+        else:
+            # 处理单个条件
+            return evaluate_single_condition(condition_str, context, ops)
+            
+    except Exception as e:
+        color_logger.error(f"Error evaluating condition '{condition_str}': {e}")
+        return False
+
+
+def evaluate_single_condition(condition_str: str, context: dict, ops: dict) -> bool:
+    """
+    评估单个条件表达式
+    """
+    import re
+    
+    # 支持的比较操作符
+    operators = ['>=', '<=', '!=', '==', '>', '<']
+    
+    for op in operators:
+        if op in condition_str:
+            parts = condition_str.split(op, 1)  # 只分割第一个匹配的操作符
+            if len(parts) == 2:
+                left_expr = parts[0].strip()
+                right_expr = parts[1].strip()
+                
+                # 解析左侧变量
+                left_value = context.get(left_expr, 0)  # 如果变量不存在，默认为0
+                
+                # 解析右侧值（可能是数字或字符串）
+                if right_expr.startswith("'") and right_expr.endswith("'"):
+                    # 字符串比较
+                    right_value = right_expr[1:-1]  # 去除引号
+                elif right_expr.startswith('"') and right_expr.endswith('"'):
+                    # 字符串比较
+                    right_value = right_expr[1:-1]  # 去除引号
+                else:
+                    # 数值比较
+                    try:
+                        right_value = float(right_expr)
+                    except ValueError:
+                        # 如果不能转换为数值，则按字符串处理
+                        right_value = right_expr
+                
+                # 执行比较
+                op_func = ops[op]
+                
+                # 处理None值
+                if left_value is None:
+                    left_value = 0
+                if right_value is None:
+                    right_value = 0
+                    
+                return op_func(left_value, right_value)
+    
+    # 如果没有找到操作符，返回False
+    color_logger.warning(f"No operator found in condition: {condition_str}")
+    return False
+
+
+def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
+    """
+    关闭已解决的告警
+    """
+    try:
+        filters = {
+            'node_id': str(node.uuid),
+            'status': 'OPEN'
+        }
+        if alert_type:
+            filters['alert_type'] = alert_type
+        if alert_subtype:
+            filters['alert_subtype'] = alert_subtype
+            
+        open_alerts = Alert.objects.filter(**filters)
+        
+        for alert in open_alerts:
+            alert.status = 'CLOSED'
+            alert.resolved_at = timezone.now()
+            alert.save()
+            color_logger.info(f"Closed alert {alert.title} for node {node.name}")
+    except Exception as e:
+        color_logger.error(f"Error closing resolved alerts for node {node.name}: {str(e)}")
+
+
+def check_alert_conditions(node, health_record, rule: AlertRule):
+    """
+    根据规则检查节点是否触发告警
+    """
+    try:
+        # 如果规则需要聚合历史数据（如平均响应时间），则获取时间窗口内的数据
+        if rule.aggregation and rule.time_window:
+            # 解析时间窗口，例如 '5m', '10m', '1h', '1d' 等
+            time_delta = parse_time_window(rule.time_window)
+            if time_delta:
+                # 获取时间窗口内的健康记录
+                time_limit = timezone.now() - time_delta
+                node_health_records = NodeHealth.objects.filter(
+                    node=node,
+                    create_time__gte=time_limit,
+                    response_time__isnull=False  # 只计算有响应时间的记录
+                ).order_by('-create_time')
+                
+                # 根据聚合方式计算
+                if rule.aggregation == 'avg' and node_health_records.exists():
+                    values = [record.response_time for record in node_health_records if record.response_time is not None]
+                    if values:
+                        aggregated_value = sum(values) / len(values)
+                    else:
+                        aggregated_value = None
+                elif rule.aggregation == 'max' and node_health_records.exists():
+                    values = [record.response_time for record in node_health_records if record.response_time is not None]
+                    aggregated_value = max(values) if values else None
+                elif rule.aggregation == 'min' and node_health_records.exists():
+                    values = [record.response_time for record in node_health_records if record.response_time is not None]
+                    aggregated_value = min(values) if values else None
+                else:
+                    # 默认使用当前记录的值
+                    aggregated_value = health_record.response_time if health_record else None
+            else:
+                # 时间窗口解析失败，使用当前记录的值
+                aggregated_value = health_record.response_time if health_record else None
+        else:
+            # 不需要聚合，使用当前记录的值
+            aggregated_value = health_record.response_time if health_record else None
+
+        # 构建评估上下文
+        # 从告警规则的条件中提取阈值（例如从 "avg_response_time > 1000" 提取 1000）
+        threshold_value = extract_threshold_from_condition(rule.condition)
+        
+        # 初始化上下文
+        context = {
+            'node_name': node.name,
+            'status': health_record.healthy_status if health_record else node.healthy_status,
+            'avg_response_time': aggregated_value if aggregated_value is not None else 0,  # 使用聚合后的值，如果为None则设为0
+            'current_response_time': health_record.response_time if health_record and health_record.response_time else 0,  # 当前响应时间
+            'probe_result': health_record.probe_result if health_record else {},
+            'error_message': health_record.error_message if health_record else None,
+            'threshold': threshold_value,
+            'probe_type': '',  # 默认值，从probe_result中提取
+            'error_type': '',  # 默认值
+            'status_code': 0,  # 默认值
+        }
+        
+        # 从probe_result中提取更多数据
+        probe_result = health_record.probe_result if health_record else {}
+        if 'details' in probe_result:
+            details = probe_result['details']
+            
+            # 计算健康检查失败数量
+            total_checks = len(details)
+            failed_checks = sum(1 for item in details if not item.get('is_healthy', True))
+            context['failed_check_count'] = failed_checks
+            context['total_check_count'] = total_checks
+            context['failure_rate'] = failed_checks / total_checks if total_checks > 0 else 0
+            
+            # 提取probe相关的数据供条件判断使用
+            for detail in details:
+                # 根据探活类型设置probe_type
+                host = detail.get('host')
+                port = detail.get('port')
+                
+                if host and not port:
+                    context['probe_type'] = 'ping'
+                elif host and port:
+                    context['probe_type'] = 'port'
+                elif detail.get('url'):
+                    context['probe_type'] = 'http'
+                
+                # 提取错误类型和状态码
+                if not detail.get('is_healthy'):
+                    if 'timeout' in (detail.get('error_message', '') or '').lower():
+                        context['error_type'] = 'timeout'
+                    if 'status_code' in detail:
+                        context['status_code'] = detail['status_code']
+        
+        # 为健康状态检查提供额外上下文
+        context['healthy_status'] = health_record.healthy_status if health_record else node.healthy_status
+        
+        # 评估告警条件
+        condition_result = evaluate_condition(rule.condition, context)
+        
+        if condition_result:
+            # 生成告警标题和描述
+            # 尝试使用聚合值，如果不可用则使用当前值
+            avg_time_value = aggregated_value if aggregated_value is not None else (health_record.response_time if health_record else 0)
+            
+            title = rule.message.format(
+                node_name=node.name,
+                avg_response_time=avg_time_value,
+                threshold=threshold_value  # 使用从条件中提取的阈值
+            )
+            
+            alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+            
+            create_or_update_alert(
+                node=node,
+                alert_type=rule.name.upper().replace('-', '_'),
+                alert_subtype=alert_subtype,
+                title=f"节点 {node.name} {rule.description}",
+                description=title,
+                severity=rule.severity
+            )
+        else:
+            # 条件不满足，关闭对应的告警
+            close_resolved_alerts(
+                node=node, 
+                alert_type=rule.name.upper().replace('-', '_')
+            )
+            
+    except Exception as e:
+        color_logger.error(f"Error checking alert condition for node {node.name}: {str(e)}")
+
+
+def parse_time_window(time_window_str: str) -> timedelta:
+    """
+    解析时间窗口字符串，例如 '5m', '10m', '1h', '1d' 等
+    """
+    try:
+        unit = time_window_str[-1]
+        value = int(time_window_str[:-1])
+        
+        if unit == 's':  # 秒
+            return timedelta(seconds=value)
+        elif unit == 'm':  # 分钟
+            return timedelta(minutes=value)
+        elif unit == 'h':  # 小时
+            return timedelta(hours=value)
+        elif unit == 'd':  # 天
+            return timedelta(days=value)
+        else:
+            color_logger.warning(f"Unknown time unit: {unit}, defaulting to 5 minutes")
+            return timedelta(minutes=5)  # 默认5分钟
+    except Exception:
+        color_logger.warning(f"Invalid time window format: {time_window_str}, defaulting to 5 minutes")
+        return timedelta(minutes=5)
+
+
+def extract_threshold_from_condition(condition: str) -> float:
+    """
+    从告警条件中提取阈值，例如从 "avg_response_time > 1000" 提取 1000
+    """
+    import re
+    
+    # 支持的比较操作符
+    operators = ['>', '>=', '<', '<=', '==', '!=']
+    
+    for op in operators:
+        if op in condition:
+            # 使用正则表达式匹配操作符后的数字
+            pattern = rf'{re.escape(op)}\s*(\d+\.?\d*)'
+            match = re.search(pattern, condition)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass  # 如果不能转换为数值，则继续尝试其他操作符
+    
+    # 如果没有找到阈值，返回默认值 1000
+    return 1000.0
+
+
+@shared_task
+def check_all_alerts():
+    """
+    根据配置文件中的规则检查所有告警
+    """
+    from .models import Node, NodeHealth
+    
+    # 获取所有启用的告警规则
+    enabled_rules = alert_config_parser.get_enabled_rules()
+    
+    if not enabled_rules:
+        color_logger.info("No enabled alert rules found")
+        return
+    
+    # 获取所有活跃节点
+    active_nodes = Node.objects.filter(is_active=True).prefetch_related('health_records')
+    
+    for node in active_nodes:
+        # 获取最近的健康记录
+        recent_health = node.health_records.first()
+        
+        # 对每个启用的规则进行检查
+        for rule in enabled_rules:
+            if rule.data_source == 'node_health':
+                # 只对健康数据类型的规则处理
+                check_alert_conditions(node, recent_health, rule)
+    
+    color_logger.info(f"Completed alert check for {len(active_nodes)} nodes with {len(enabled_rules)} rules")
+
+

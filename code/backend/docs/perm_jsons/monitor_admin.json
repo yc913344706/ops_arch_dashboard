@@ -4,7 +4,10 @@
       "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"],
       "/api/v1/monitor/link/topology/": ["GET"],
       "/api/v1/monitor/nodes/": ["GET", "POST", "PUT", "DELETE"],
-      "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"]
+      "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"],
+      "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
+      "/api/v1/monitor/alert/": ["GET"],
+      "/api/v1/monitor/alert-types/": ["GET"]
     }
   },
   "frontend": {

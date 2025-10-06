@@ -4,6 +4,94 @@ from apps.user.models import User
 from apps.monitor.enum import NODE_HEALTH_STATUS_CHOICES
 
 
+class Alert(BaseModel):
+    """
+    告警模型 - 记录系统监控告警信息
+    """
+    # 告警状态
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('CLOSED', 'Closed'),
+        ('ACKNOWLEDGED', 'Acknowledged'),
+    ]
+    
+    # 告警类型 - 现在支持动态类型，这里保留一些常用类型
+    ALERT_TYPE_CHOICES = [
+        ('HEALTH_CHECK_FAILED', 'Health Check Failed'),
+        ('RESPONSE_TIME_SLOW', 'Response Time Slow'),
+        ('SERVICE_UNAVAILABLE', 'Service Unavailable'),
+        ('CONNECTION_TIMEOUT', 'Connection Timeout'),
+        ('PARTIAL_HEALTH_CHECK_FAILED', 'Partial Health Check Failed'),
+    ]
+    
+    # 严重程度
+    SEVERITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ]
+    
+    # 唯一标识字段
+    node_id = models.CharField(max_length=100, help_text="关联的节点ID")
+    alert_type = models.CharField(max_length=50, choices=ALERT_TYPE_CHOICES, help_text="告警类型")
+    alert_subtype = models.CharField(max_length=100, blank=True, default="", help_text="告警子类型，用于更细化的分类")
+    
+    # 告警内容
+    title = models.CharField(max_length=200, help_text="告警标题")
+    description = models.TextField(help_text="告警详细描述")
+    
+    # 状态管理
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN', help_text="告警状态")
+    severity = models.CharField(max_length=20, default='MEDIUM', choices=SEVERITY_CHOICES, help_text="告警严重程度")
+    
+    # 关联信息
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='created_alerts', 
+        help_text="创建人"
+    )
+    acknowledged_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='acknowledged_alerts', 
+        help_text="确认人"
+    )
+    
+    # 时间字段
+    first_occurred = models.DateTimeField(auto_now_add=True, help_text="首次发生时间")
+    last_occurred = models.DateTimeField(auto_now=True, help_text="最后发生时间")
+    resolved_at = models.DateTimeField(null=True, blank=True, help_text="解决时间")
+    acknowledged_at = models.DateTimeField(null=True, blank=True, help_text="确认时间")
+    
+    class Meta:
+        db_table = 'alert'
+        verbose_name = '告警'
+        verbose_name_plural = verbose_name
+        # 确保同一节点的相同类型告警不会重复（仅对未解决的告警）
+        constraints = [
+            models.UniqueConstraint(
+                fields=['node_id', 'alert_type', 'alert_subtype', 'status'],
+                condition=models.Q(status='OPEN'),
+                name='unique_open_alert'
+            ),
+            models.UniqueConstraint(
+                fields=['node_id', 'alert_type', 'alert_subtype', 'status'],
+                condition=models.Q(status='ACKNOWLEDGED'),
+                name='unique_acknowledged_alert'
+            ),
+        ]
+        ordering = ['-first_occurred']
+
+    def __str__(self):
+        return f"{self.title} - {self.status}"
+
+
 class Link(BaseModel):
     """
     链路模型 - 定义一个完整的运维链路

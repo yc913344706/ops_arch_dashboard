@@ -60,6 +60,11 @@ app.conf.update(
         'cleanup-health-records': {
             'task': 'apps.monitor.tasks.cleanup_health_records',
             'schedule': crontab(hour=2, minute=0),  # 每天凌晨2点执行
+        },
+        # 每10分钟检查所有告警规则
+        'check-all-alerts': {
+            'task': 'apps.monitor.tasks.check_all_alerts',
+            'schedule': timedelta(minutes=1),  # 每1分钟执行一次
         }
     }
 )

@@ -15,4 +15,9 @@ urlpatterns = [
     
     # 节点健康相关接口
     path('node/health/', views.NodeHealthView.as_view(), name='node-health'),
+    
+    # 告警相关接口
+    path('alerts/', views.AlertView.as_view(), name='alert-list'),
+    path('alert/', views.AlertDetailView.as_view(), name='alert-detail'),
+    path('alert-types/', views.AlertTypesView.as_view(), name='alert-types'),
 ]
