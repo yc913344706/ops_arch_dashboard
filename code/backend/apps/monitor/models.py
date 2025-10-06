@@ -132,7 +132,8 @@ class NodeHealth(BaseModel):
     healthy_status = models.CharField(
         max_length=20,
         choices=NODE_HEALTH_STATUS_CHOICES,
-        verbose_name='健康状态'
+        verbose_name='健康状态',
+        default='unknown'
     )
     response_time = models.FloatField(null=True, blank=True, verbose_name='响应时间(ms)')
     probe_result = models.JSONField(

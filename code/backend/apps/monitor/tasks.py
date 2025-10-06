@@ -23,7 +23,7 @@ def check_node_health(node_uuid):
             # 创建健康记录
             NodeHealth.objects.create(
                 node=node,
-                is_healthy=False,  # Since there's no basic info, we can't determine health
+                healthy_status='unknown',  # Since there's no basic info, we can't determine health
                 response_time=None,
                 probe_result={'details': node.basic_info_list},
                 error_message='No basic info to check'
