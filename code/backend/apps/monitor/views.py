@@ -1,7 +1,7 @@
 from django.views import View
 from apps.monitor.tasks import check_node_health
 from lib.time_tools import utc_obj_to_time_zone_str
-from lib.request_tool import pub_get_request_body, pub_success_response, pub_error_response, get_request_param
+from lib.request_tool import pub_bool_check, pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection
 from lib.log import color_logger
@@ -20,8 +20,9 @@ class LinkView(View):
             page = int(body.get('page', 1))
             page_size = int(body.get('page_size', 20))
             search = body.get('search', '')
+            is_active = pub_bool_check(body.get('is_active', True))
             
-            link_list = Link.objects.all()
+            link_list = Link.objects.filter(is_active=is_active)
             
             # 添加搜索功能
             if search:

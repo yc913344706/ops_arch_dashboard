@@ -18,7 +18,7 @@
               @keyup.enter="fetchLinks" />
           </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="filterForm.isActive" placeholder="选择状态" clearable>
+            <el-select v-model="filterForm.isActive" placeholder="选择状态" clearable style="width: 120px;">
               <el-option label="启用" :value="true" />
               <el-option label="禁用" :value="false" />
             </el-select>
@@ -246,8 +246,9 @@ const toggleStatus = async (row: any) => {
     )
     
     // 调用API更新状态
-    await linkApi.updateLink(row.uuid, {
+    await linkApi.updateLink({
       ...row,
+      uuid: row.uuid,
       is_active: !row.is_active
     })
     
@@ -274,7 +275,7 @@ const deleteLink = async (row: any) => {
       }
     )
     
-    await linkApi.deleteLink(row.uuid)
+    await linkApi.deleteLink({uuid: row.uuid})
     ElMessage.success('删除成功')
     fetchLinks()
   } catch (error) {
