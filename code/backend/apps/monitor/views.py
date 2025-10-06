@@ -197,6 +197,7 @@ class LinkTopologyView(View):
                     'uuid': str(conn.uuid),
                     'from_node': str(conn.from_node.uuid),
                     'to_node': str(conn.to_node.uuid),
+                    'healthy_status': conn.from_node.healthy_status,
                 })
 
             return pub_success_response({

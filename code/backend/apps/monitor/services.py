@@ -6,23 +6,6 @@ class ProbeService:
     """
     探活服务管理
     """
-    @staticmethod
-    def start_scheduled_tasks():
-        """
-        启动定时任务
-        """
-        # 重载任务调度配置
-        current_app.conf.beat_schedule.update({
-            'check-all-nodes': {
-                'task': 'apps.monitor.tasks.check_all_nodes',
-                'schedule': current_app.conf.get('PROBE_INTERVAL', 60),
-            },
-            'cleanup-health-records': {
-                'task': 'apps.monitor.tasks.cleanup_health_records',
-                'schedule': 3600,  # 每小时
-            }
-        })
-        current_app.conf.timezone = 'UTC'
     
     @staticmethod
     def manual_check_node(node_uuid):

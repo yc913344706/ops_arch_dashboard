@@ -259,7 +259,8 @@ const loadDiagramData = async (diagramId: string) => {
     const edges = connections.map(conn => ({
       id: conn.uuid,
       source: conn.from_node,
-      target: conn.to_node
+      target: conn.to_node,
+      healthy_status: conn.healthy_status
     }))
     
     topologyData.value = {
