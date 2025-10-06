@@ -41,24 +41,34 @@
                     <el-input v-model="selectedNode.style.labelText" />
                   </el-form-item>
                   
-                  <el-form-item label="基础信息">
+                  <el-form-item label="服务列表">
                     <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="basic-info-item">
+                      <el-tag 
+                        v-if="typeof info.is_healthy !== 'undefined'"
+                        :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
+                        size="small"
+                        style="width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; display: flex; align-items: center; justify-content: center;"
+                      >
+                        <span v-if="info.is_healthy === true" style="font-size: 12px;">✓</span>
+                        <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
+                        <span v-else style="font-size: 12px;">?</span>
+                      </el-tag>
                       <el-input 
                         v-model="info.host" 
                         placeholder="主机" 
                         size="small"
-                        style="width: 45%; margin-right: 5px;"
+                        style="width: 40%; margin-right: 5px;"
                       />
                       <el-input 
                         v-model="info.port" 
                         placeholder="端口" 
                         size="small"
                         type="number"
-                        style="width: 25%; margin-right: 5px;"
+                        style="width: 20%; margin-right: 5px;"
                       />
                       <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
                     </div>
-                    <el-button @click="addBasicInfo" size="small">添加信息</el-button>
+                    <el-button @click="addBasicInfo" size="small">添加主机/端口</el-button>
                   </el-form-item>
                   
                   <el-form-item label="健康状态">
@@ -171,24 +181,34 @@
           <el-input v-model="newNodeForm.name" placeholder="请输入节点名称" />
         </el-form-item>
         
-        <el-form-item label="基础信息">
+        <el-form-item label="服务列表">
           <div v-for="(info, index) in newNodeForm.basic_info_list" :key="index" class="basic-info-item">
+            <el-tag 
+              v-if="typeof info.is_healthy !== 'undefined'"
+              :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
+              size="small"
+              style="width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; display: flex; align-items: center; justify-content: center;"
+            >
+              <span v-if="info.is_healthy === true" style="font-size: 12px;">✓</span>
+              <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
+              <span v-else style="font-size: 12px;">?</span>
+            </el-tag>
             <el-input 
               v-model="info.host" 
               placeholder="主机" 
               size="small"
-              style="width: 45%; margin-right: 5px;"
+              style="width: 40%; margin-right: 5px;"
             />
             <el-input 
               v-model="info.port" 
               placeholder="端口" 
               size="small"
               type="number"
-              style="width: 25%; margin-right: 5px;"
+              style="width: 20%; margin-right: 5px;"
             />
             <el-button @click="removeNewBasicInfo(index)" size="small" type="danger">删除</el-button>
           </div>
-          <el-button @click="addNewBasicInfo" size="small">添加信息</el-button>
+          <el-button @click="addNewBasicInfo" size="small">添加主机/端口</el-button>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -304,13 +324,13 @@ const createNewNode = () => {
 const resetNewNodeForm = () => {
   newNodeForm.value = {
     name: '',
-    basic_info_list: [{}]
+    basic_info_list: [{ is_healthy: null }]
   }
 }
 
 // 添加新节点的基础信息
 const addNewBasicInfo = () => {
-  newNodeForm.value.basic_info_list.push({})
+  newNodeForm.value.basic_info_list.push({ is_healthy: null })
 }
 
 // 删除新节点的基础信息
@@ -365,7 +385,7 @@ const addBasicInfo = () => {
     if (!selectedNode.value.basic_info_list) {
       selectedNode.value.basic_info_list = []
     }
-    selectedNode.value.basic_info_list.push({ host: '', port: null })
+    selectedNode.value.basic_info_list.push({ host: '', port: null, is_healthy: null })
   }
 }
 

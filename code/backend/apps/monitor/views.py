@@ -1,4 +1,5 @@
 from django.views import View
+from apps.monitor.tasks import check_node_health
 from lib.request_tool import pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection
@@ -326,6 +327,7 @@ class NodeView(View):
             for key, value in update_dict.items():
                 setattr(node, key, value)
             node.save()
+            check_node_health(node.uuid)
 
             return pub_success_response({
                 'uuid': str(node.uuid),

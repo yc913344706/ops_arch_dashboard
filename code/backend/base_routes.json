@@ -15,19 +15,19 @@
           "showParent": true
         }
       },
-      "architecture": {
-        "path": "/monitor/links/architecture-editor",
-        "name": "MonitorArchitecture",
-        "meta": {
-          "title": "架构图",
-          "showParent": true
-        }
-      },
       "links": {
         "path": "/monitor/links/index",
         "name": "MonitorLinks",
         "meta": {
           "title": "链路管理",
+          "showParent": true
+        }
+      },
+      "architecture": {
+        "path": "/monitor/links/architecture-editor",
+        "name": "MonitorArchitecture",
+        "meta": {
+          "title": "链路架构",
           "showParent": true
         }
       },
