@@ -4,7 +4,7 @@
 
 这是一个最小化全栈开发基础框架，支持 RBAC 权限管理系统。包括前端、后端、nginx、mysql、redis。
 
-- **技术栈**：Python 3.13、Django 5.2、Vue 3.5
+- **技术栈**：Python 3.13、Django 5.2（没有使用 Django RestFramework）、Vue 3.5
 - **环境要求**：Docker Engine 18.06.0、Docker Compose 3.7+
 
 ## 目录结构
