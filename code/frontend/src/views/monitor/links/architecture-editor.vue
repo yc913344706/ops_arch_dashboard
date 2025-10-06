@@ -31,7 +31,7 @@
         />
       </div>
       
-      <el-aside class="operation-panel" width="300px">
+      <el-aside class="operation-panel">
         <div v-if="selectedNode">
           <el-tabs type="border-card" class="tabs-container">
             <el-tab-pane label="节点管理">
@@ -47,14 +47,14 @@
                         v-model="info.host" 
                         placeholder="主机" 
                         size="small"
-                        style="width: 40%; margin-right: 5px;"
+                        style="width: 45%; margin-right: 5px;"
                       />
                       <el-input 
                         v-model="info.port" 
                         placeholder="端口" 
                         size="small"
                         type="number"
-                        style="width: 30%; margin-right: 5px;"
+                        style="width: 25%; margin-right: 5px;"
                       />
                       <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
                     </div>
@@ -177,14 +177,14 @@
               v-model="info.host" 
               placeholder="主机" 
               size="small"
-              style="width: 40%; margin-right: 5px;"
+              style="width: 45%; margin-right: 5px;"
             />
             <el-input 
               v-model="info.port" 
               placeholder="端口" 
               size="small"
               type="number"
-              style="width: 30%; margin-right: 5px;"
+              style="width: 25%; margin-right: 5px;"
             />
             <el-button @click="removeNewBasicInfo(index)" size="small" type="danger">删除</el-button>
           </div>
@@ -578,7 +578,7 @@ onMounted(() => {
 }
 
 .operation-panel {
-  width: 300px;
+  width: 400px;
   background-color: #fff;
   border-left: 1px solid #e4e7ed;
   overflow-y: auto;

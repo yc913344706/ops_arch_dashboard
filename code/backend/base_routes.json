@@ -72,7 +72,7 @@
     "meta": {
       "title": "系统管理",
       "icon": "ep:setting",
-      "rank": 1
+      "rank": 99
     },
     "children": {
       "group": {

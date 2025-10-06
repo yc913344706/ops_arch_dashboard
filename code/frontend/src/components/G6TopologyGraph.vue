@@ -146,6 +146,7 @@ const renderTopology = () => {
     return {
       id: node.uuid || node.id,
       basic_info_list: node.basic_info_list || [],
+      is_healthy: node.is_healthy,
 
       /**
        * 节点通用配置项： https://g6.antv.antgroup.com/manual/element/node/base-node
