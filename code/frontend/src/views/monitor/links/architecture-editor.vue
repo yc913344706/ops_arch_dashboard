@@ -62,8 +62,8 @@
                   </el-form-item>
                   
                   <el-form-item label="健康状态">
-                    <el-tag :type="selectedNode.is_healthy ? 'success' : 'danger'">
-                      {{ selectedNode.is_healthy ? '健康' : '异常' }}
+                    <el-tag :type="getNodeHealthTypeByStatus(selectedNode.healthy_status)">
+                      {{ getNodeHealthLabelByStatus(selectedNode.healthy_status) }}
                     </el-tag>
                   </el-form-item>
                   
@@ -386,14 +386,18 @@ const updateNodeInfo = async () => {
   try {
     await nodeApi.updateNode({
       uuid: selectedNode.value.id,
-      name: selectedNode.value.style.labelText,
+      name: selectedNode.value.name,
       basic_info_list: selectedNode.value.basic_info_list?.filter((info: any) => info.host || info.port) || []
     })
     
     // 更新本地数据
     const index = topologyData.value.nodes.findIndex(n => n.uuid === selectedNode.value.id)
     if (index !== -1) {
-      topologyData.value.nodes[index] = { ...selectedNode.value }
+      // Make sure to merge the healthy_status if it exists in the response
+      topologyData.value.nodes[index] = { 
+        ...selectedNode.value,
+        healthy_status: topologyData.value.nodes[index].healthy_status || 'unknown'
+      }
     }
     
     ElMessage.success('节点信息更新成功')
@@ -420,6 +424,36 @@ const availableNodes = computed(() => {
 const getNodeName = (nodeId: string) => {
   const node = topologyData.value.nodes.find(n => n.uuid === nodeId)
   return node ? node.name : nodeId.substring(0, 8) + '...'
+}
+
+// 根据健康状态获取类型
+const getNodeHealthTypeByStatus = (healthy_status: string) => {
+  switch(healthy_status) {
+    case 'green':
+      return 'success';
+    case 'yellow':
+      return 'warning';
+    case 'red':
+      return 'danger';
+    case 'unknown':
+    default:
+      return 'info';
+  }
+}
+
+// 根据健康状态获取标签
+const getNodeHealthLabelByStatus = (healthy_status: string) => {
+  switch(healthy_status) {
+    case 'green':
+      return '健康';
+    case 'yellow':
+      return '部分异常';
+    case 'red':
+      return '异常';
+    case 'unknown':
+    default:
+      return '未知';
+  }
 }
 
 // 创建连接

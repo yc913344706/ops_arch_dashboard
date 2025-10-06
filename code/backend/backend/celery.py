@@ -43,12 +43,23 @@ app.autodiscover_tasks()
 app.conf.update(
     imports=(
         'apps.demo.tasks',
+        'apps.monitor.tasks',
     ),
     beat_schedule={
         # 每30秒 测试任务
         'say-hello': {
             'task': 'apps.demo.tasks.say_hello',
             'schedule': timedelta(seconds=30),
+        },
+        # 每5分钟检查所有节点健康状态
+        'check-all-nodes-health': {
+            'task': 'apps.monitor.tasks.check_all_nodes',
+            'schedule': timedelta(minutes=5),
+        },
+        # 每天凌晨2点清理过期的健康记录
+        'cleanup-health-records': {
+            'task': 'apps.monitor.tasks.cleanup_health_records',
+            'schedule': crontab(hour=2, minute=0),  # 每天凌晨2点执行
         }
     }
 )

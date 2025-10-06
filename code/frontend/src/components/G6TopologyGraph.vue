@@ -134,6 +134,21 @@ const initGraph = async () => {
   })
 }
 
+// 根据健康状态获取颜色
+const getHealthColorByStatus = (healthy_status: string, type: 'fill' | 'stroke') => {
+  switch(healthy_status) {
+    case 'green': // 健康
+      return type === 'fill' ? '#e6f7ff' : '#1890ff';
+    case 'yellow': // 部分异常
+      return type === 'fill' ? '#fffbe6' : '#faad14';
+    case 'red': // 异常
+      return type === 'fill' ? '#fff2e8' : '#ff7a45';
+    case 'unknown': // 未知
+    default:
+      return type === 'fill' ? '#f5f5f5' : '#bfbfbf';
+  }
+}
+
 // 渲染拓扑数据
 const renderTopology = () => {
   if (!graphInstance || !props.topologyData) return
@@ -146,7 +161,7 @@ const renderTopology = () => {
     return {
       id: node.uuid || node.id,
       basic_info_list: node.basic_info_list || [],
-      is_healthy: node.is_healthy,
+      healthy_status: node.healthy_status,
 
       /**
        * 节点通用配置项： https://g6.antv.antgroup.com/manual/element/node/base-node
@@ -168,10 +183,10 @@ const renderTopology = () => {
          * - 主图形是节点的核心部分，定义了节点的基本形状和外观。
          * - 完整配置项https://g6.antv.antgroup.com/manual/element/node/base-node#%E8%99%9A%E7%BA%BF%E8%BE%B9%E6%A1%86%E6%A0%B7%E5%BC%8F
          */
-        fill: node.is_healthy ? '#e6f7ff' : '#fff2e8',  // 填充
+        fill: getHealthColorByStatus(node.healthy_status, 'fill'),  // 填充
         lineWidth: 2, // 线宽
         radius: 6, // 圆角
-        stroke: node.is_healthy ? '#1890ff' : '#ff7a45', // 描边
+        stroke: getHealthColorByStatus(node.healthy_status, 'stroke'), // 描边
         size: G6_NODE_SIZE, // 调整节点尺寸为更合适的大小
 
         /* 标签

@@ -1,6 +1,7 @@
 from django.db import models
 from lib.model_tools import BaseModel
 from apps.user.models import User
+from apps.monitor.enum import NODE_HEALTH_STATUS_CHOICES
 
 
 class Link(BaseModel):
@@ -56,7 +57,12 @@ class Node(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     position_x = models.FloatField(null=True, blank=True, verbose_name='X坐标')
     position_y = models.FloatField(null=True, blank=True, verbose_name='Y坐标')
-    is_healthy = models.BooleanField(default=True, verbose_name='健康状态')
+    healthy_status = models.CharField(
+        max_length=20,
+        choices=NODE_HEALTH_STATUS_CHOICES,
+        default='unknown',
+        verbose_name='健康状态'
+    )
     last_check_time = models.DateTimeField(null=True, blank=True, verbose_name='最后检查时间')
 
     class Meta:
@@ -123,7 +129,11 @@ class NodeHealth(BaseModel):
         related_name='health_records',
         verbose_name='节点'
     )
-    is_healthy = models.BooleanField(verbose_name='是否健康')
+    healthy_status = models.CharField(
+        max_length=20,
+        choices=NODE_HEALTH_STATUS_CHOICES,
+        verbose_name='健康状态'
+    )
     response_time = models.FloatField(null=True, blank=True, verbose_name='响应时间(ms)')
     probe_result = models.JSONField(
         default=dict,
@@ -137,8 +147,7 @@ class NodeHealth(BaseModel):
         ordering = ['-create_time']
 
     def __str__(self):
-        status = "健康" if self.is_healthy else "不健康"
-        return f"{self.node.name} - {status}"
+        return f"{self.node.name} - {self.healthy_status}"
 
 
 class AppSetting(BaseModel):

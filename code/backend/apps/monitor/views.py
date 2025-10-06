@@ -184,7 +184,7 @@ class LinkTopologyView(View):
                     'uuid': str(node.uuid),
                     'name': node.name,
                     'basic_info_list': node.basic_info_list,
-                    'is_healthy': node.is_healthy,
+                    'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
                     'create_time': node.create_time.isoformat() if node.create_time else None
@@ -251,7 +251,7 @@ class NodeView(View):
                         'name': node.link.name
                     },
                     'is_active': node.is_active,
-                    'is_healthy': node.is_healthy,
+                    'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
                     'create_time': node.create_time.isoformat() if node.create_time else None,
@@ -515,7 +515,7 @@ class NodeHealthView(View):
                 data = {
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'is_healthy': latest_health.is_healthy,
+                    'healthy_status': latest_health.healthy_status,
                     'response_time': latest_health.response_time,
                     'last_check_time': latest_health.create_time.isoformat() if latest_health.create_time else None,
                     'probe_result': latest_health.probe_result,
@@ -526,7 +526,7 @@ class NodeHealthView(View):
                 data = {
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'is_healthy': node.is_healthy,
+                    'healthy_status': node.healthy_status,
                     'response_time': None,
                     'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
                     'probe_result': {},
