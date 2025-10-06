@@ -34,11 +34,11 @@
       <el-aside class="operation-panel" width="300px">
         <div v-if="selectedNode">
           <el-tabs type="border-card" class="tabs-container">
-            <el-tab-pane label="节点信息">
+            <el-tab-pane label="节点管理">
               <div class="node-info-panel">
                 <el-form :model="selectedNode" label-width="80px" size="small">
                   <el-form-item label="名称">
-                    <el-input v-model="selectedNode.style.labelText" @change="updateNodeInfo" />
+                    <el-input v-model="selectedNode.name" />
                   </el-form-item>
                   
                   <el-form-item label="基础信息">
@@ -48,7 +48,6 @@
                         placeholder="主机" 
                         size="small"
                         style="width: 40%; margin-right: 5px;"
-                        @change="updateNodeInfo"
                       />
                       <el-input 
                         v-model="info.port" 
@@ -56,7 +55,6 @@
                         size="small"
                         type="number"
                         style="width: 30%; margin-right: 5px;"
-                        @change="updateNodeInfo"
                       />
                       <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
                     </div>
@@ -68,14 +66,19 @@
                       {{ selectedNode.is_healthy ? '健康' : '异常' }}
                     </el-tag>
                   </el-form-item>
+                  
+                  <el-form-item>
+                    <el-button type="primary" @click="updateNodeInfo" size="small">保存</el-button>
+                    <el-button type="danger" @click="deleteSelectedNode" size="small" style="margin-left: 10px;">删除节点</el-button>
+                  </el-form-item>
                 </el-form>
               </div>
             </el-tab-pane>
-            <el-tab-pane label="操作">
+            <el-tab-pane label="连接管理">
               <div class="operation-section">
                 <!-- 连接管理 -->
                 <div class="connection-management">
-                  <h4>连接管理</h4>
+                  <h4>已有连接</h4>
                   
                   <div class="existing-connections">
                     <div 
@@ -83,11 +86,27 @@
                       :key="conn.uuid" 
                       class="connection-item"
                     >
-                      <span>{{ getNodeName(conn.to_node) }}</span>
+                      <el-select 
+                        v-model="conn.to_node"
+                        placeholder="选择目标节点"
+                        filterable
+                        size="small"
+                        @change="updateConnectionTarget(conn.uuid, conn.to_node)"
+                        style="width: 70%;"
+                      >
+                        <el-option
+                          v-for="node in availableNodes"
+                          :key="node.uuid"
+                          :label="node.name"
+                          :value="node.uuid"
+                          :disabled="node.uuid === selectedNode.uuid"
+                        />
+                      </el-select>
                       <el-button 
                         size="small" 
                         type="danger" 
                         @click="deleteConnection(conn.uuid)"
+                        style="margin-left: 10px;"
                       >
                         删除
                       </el-button>
@@ -102,14 +121,6 @@
                   
                   <h5>添加连接</h5>
                   <el-form :model="tempConnection" label-width="60px" size="small">
-                    <!-- <el-form-item label="方向">
-                      <el-select v-model="tempConnection.direction" placeholder="选择方向">
-                        <el-option label="上" value="up" />
-                        <el-option label="下" value="down" />
-                        <el-option label="左" value="left" />
-                        <el-option label="右" value="right" />
-                      </el-select>
-                    </el-form-item> -->
                     <el-form-item label="目标节点">
                       <el-select 
                         v-model="tempConnection.to_node" 
@@ -132,7 +143,6 @@
                         @click="createConnection"
                         :disabled="!tempConnection.to_node"
                       >
-                        <!-- :disabled="!tempConnection.direction || !tempConnection.to_node" -->
                         添加连接
                       </el-button>
                     </el-form-item>
@@ -371,16 +381,16 @@ const removeBasicInfo = (index: number) => {
 
 // 更新节点信息
 const updateNodeInfo = async () => {
-  if (!selectedNode.value || !selectedNode.value.uuid) return
+  if (!selectedNode.value || !selectedNode.value.id) return
 
   try {
-    await nodeApi.updateNode(selectedNode.value.uuid, {
+    await nodeApi.updateNode(selectedNode.value.id, {
       name: selectedNode.value.name,
       basic_info_list: selectedNode.value.basic_info_list.filter((info: any) => info.host || info.port)
     })
     
     // 更新本地数据
-    const index = topologyData.value.nodes.findIndex(n => n.uuid === selectedNode.value.uuid)
+    const index = topologyData.value.nodes.findIndex(n => n.uuid === selectedNode.value.id)
     if (index !== -1) {
       topologyData.value.nodes[index] = { ...selectedNode.value }
     }
@@ -395,13 +405,13 @@ const updateNodeInfo = async () => {
 // 获取与当前选中节点相关的连接
 const nodeConnections = computed(() => {
   if (!selectedNode.value || !topologyData.value.connections) return []
-  return topologyData.value.connections.filter(conn => conn.from_node === selectedNode.value.uuid)
+  return topologyData.value.connections.filter(conn => conn.from_node === selectedNode.value.id)
 })
 
 // 获取可连接的节点（排除当前选中的节点）
 const availableNodes = computed(() => {
   if (!selectedNode.value || !topologyData.value.nodes) return []
-  return topologyData.value.nodes.filter(node => node.uuid !== selectedNode.value.uuid)
+  return topologyData.value.nodes.filter(node => node.uuid !== selectedNode.value.id)
 })
 
 // 获取节点名称的辅助函数
@@ -461,6 +471,65 @@ const deleteConnection = async (connectionId: string) => {
       console.error('删除连接失败:', error)
       ElMessage.error('删除连接失败')
     }
+  }
+}
+
+// 删除选中的节点
+const deleteSelectedNode = async () => {
+  if (!selectedNode.value || !selectedNode.value.id) {
+    ElMessage.error('请选择一个节点进行删除')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('确定要删除此节点吗？此操作将同时删除相关的所有连接！', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    
+    await nodeApi.deleteNode(selectedNode.value.uuid)
+    
+    // 清除选中节点
+    selectedNode.value = null
+    
+    // 刷新数据
+    await loadDiagramData(selectedDiagram.value)
+    
+    ElMessage.success('节点删除成功')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除节点失败:', error)
+      ElMessage.error('删除节点失败')
+    }
+  }
+}
+
+// 更新连接的目标节点
+const updateConnectionTarget = async (connectionId: string, newTargetNodeId: string) => {
+  if (!selectedNode.value || !connectionId || !newTargetNodeId) {
+    ElMessage.error('缺少必要的连接信息')
+    return
+  }
+
+  try {
+    // 由于API不直接支持更新连接的to_node，我们先删除旧连接再创建新连接
+    await nodeConnectionApi.deleteConnection(connectionId)
+    
+    // 创建新连接
+    await nodeConnectionApi.createConnection({
+      from_node: selectedNode.value.id,
+      to_node: newTargetNodeId,
+      link: selectedDiagram.value
+    })
+    
+    // 刷新数据
+    await loadDiagramData(selectedDiagram.value)
+    
+    ElMessage.success('连接目标节点更新成功')
+  } catch (error) {
+    console.error('更新连接目标节点失败:', error)
+    ElMessage.error('更新连接目标节点失败')
   }
 }
 
