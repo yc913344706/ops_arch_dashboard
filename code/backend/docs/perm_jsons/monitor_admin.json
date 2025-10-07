@@ -14,12 +14,9 @@
   "frontend": {
     "routes": [
       "monitor.dashboard",
-      "monitor.architecture",
       "monitor.links",
-      "monitor.link",
-      "monitor.nodes",
-      "monitor.alerts",
-      "monitor.settings"
+      "monitor.architecture",
+      "monitor.alerts"
     ],
     "resources": [
       "monitor:createDiagram"

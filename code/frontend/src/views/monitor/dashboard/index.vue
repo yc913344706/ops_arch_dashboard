@@ -77,9 +77,18 @@
             >
               <div class="alert-content">
                 <div class="alert-title">{{ alert.title }}</div>
-                <!-- <div class="alert-node">节点: {{ alert.nodeName }}</div> -->
-                <div class="alert-time">{{ alert.time }}</div>
-                <!-- <div class="alert-time">{{ formatTime(alert.time) }}</div> -->
+                <div class="alert-node">{{ alert.description }}</div>
+                <div class="alert-time">最后告警时间：{{ alert.time }}</div>
+                <!-- <div class="alert-time">{{ formatTime(new Date(alert.time)) }}</div> -->
+                <div class="alert-status" :class="`status-${alert.status.toLowerCase()}`">
+                  <el-tag 
+                    :type="getStatusType(alert.status)" 
+                    size="small"
+                    style="position: absolute; top: 2px; right: 2px;"
+                  >
+                    {{ getStatusText(alert.status) }}
+                  </el-tag>
+                </div>
               </div>
             </div>
             
@@ -162,6 +171,34 @@ const formatTime = (time: Date) => {
   
   const days = Math.floor(hours / 24)
   return `${days}天前`
+}
+
+// 获取状态类型用于标签显示
+const getStatusType = (status: string) => {
+  switch (status?.toUpperCase()) {
+    case 'OPEN':
+      return 'danger' // 红色，表示开放状态
+    case 'ACKNOWLEDGED':
+      return 'warning' // 黄色，表示已确认
+    case 'CLOSED':
+      return 'success' // 绿色，表示已关闭
+    default:
+      return 'info' // 蓝色，表示其他状态
+  }
+}
+
+// 获取状态文本
+const getStatusText = (status: string) => {
+  switch (status?.toUpperCase()) {
+    case 'OPEN':
+      return '告警中'
+    case 'ACKNOWLEDGED':
+      return '已确认'
+    case 'CLOSED':
+      return '已关闭'
+    default:
+      return status
+  }
 }
 
 // 获取概览数据
@@ -509,6 +546,7 @@ onUnmounted(() => {
   border-bottom: 1px solid #eee;
   cursor: pointer;
   transition: background-color 0.3s;
+  position: relative;
 }
 
 .alert-item:hover {
@@ -527,6 +565,12 @@ onUnmounted(() => {
   border-left: 4px solid #ff4d4f;
 }
 
+.alert-content {
+  display: flex;
+  flex-direction: column;
+  position: relative; /* 为绝对定位提供容器 */
+}
+
 .alert-content .alert-title {
   font-weight: bold;
   margin-bottom: 5px;
@@ -536,12 +580,13 @@ onUnmounted(() => {
 .alert-content .alert-node {
   font-size: 12px;
   color: #666;
-  margin-bottom: 3px;
+  margin-bottom: 5px;
 }
 
 .alert-content .alert-time {
   font-size: 12px;
   color: #999;
+  margin-bottom: 5px;
 }
 
 .no-alerts {

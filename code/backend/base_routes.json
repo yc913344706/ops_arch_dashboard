@@ -3,7 +3,7 @@
     "path": "/monitor",
     "meta": {
       "icon": "ep:monitor",
-      "title": "监控中心",
+      "title": "链路监控",
       "rank": 10
     },
     "children": {
@@ -11,7 +11,7 @@
         "path": "/monitor/dashboard/index",
         "name": "MonitorDashboard",
         "meta": {
-          "title": "监控总览",
+          "title": "链路总览",
           "showParent": true
         }
       },

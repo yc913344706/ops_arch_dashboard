@@ -39,14 +39,24 @@ class Command(BaseCommand):
                 )
             )
         
-        admin_group = UserGroup.objects.filter(code='system_admin_group').first()
-        if admin_group is None:
-            admin_group = UserGroup.objects.create(
-                name='系统管理员组',
+        system_admin_group = UserGroup.objects.filter(code='system_admin_group').first()
+        if system_admin_group is None:
+            system_admin_group = UserGroup.objects.create(
+                name='【系统模块】管理员组',
                 code='system_admin_group',
-                description='系统管理员组',
+                description='初始化创建系统管理员组',
             )
-            admin_group.users.add(admin_user)
+            system_admin_group.users.add(admin_user)
+            color_logger.info(f'创建系统管理员组成功')
+
+        chain_admin_group = UserGroup.objects.filter(code='chain_admin_group').first()
+        if chain_admin_group is None:
+            chain_admin_group = UserGroup.objects.create(
+                name='【链路监控】管理员组',
+                code='chain_admin_group',
+                description='初始化创建莲路监控管理员组',
+            )
+            chain_admin_group.users.add(admin_user)
             color_logger.info(f'创建系统管理员组成功')
 
         for perm in [
@@ -57,9 +67,7 @@ class Command(BaseCommand):
                 {
                     "backend": {
                         "api": {
-                            "/api/v1/auth/get-async-routes/": [
-                                "GET"
-                            ]
+                            "/api/v1/auth/get-async-routes/": ["GET"]
                         }
                     }
                 }
@@ -71,49 +79,15 @@ class Command(BaseCommand):
                 {
                     "backend": {
                         "api": {
-                            "/api/v1/perm/role/": [
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "DELETE"
-                            ],
-                            "/api/v1/user/user/": [
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "DELETE"
-                            ],
-                            "/api/v1/perm/roles/": [
-                                "GET",
-                                "DELETE"
-                            ],
-                            "/api/v1/user/group/": [
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "DELETE"
-                            ],
-                            "/api/v1/user/users/": [
-                                "GET",
-                                "DELETE"
-                            ],
-                            "/api/v1/user/groups/": [
-                                "GET",
-                                "DELETE"
-                            ],
-                            "/api/v1/perm/permission/": [
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "DELETE"
-                            ],
-                            "/api/v1/perm/permissions/": [
-                                "GET",
-                                "DELETE"
-                            ],
-                            "/api/v1/perm/user-permission-json/": [
-                                "GET"
-                            ]
+                            "/api/v1/perm/role/": ["GET", "POST", "PUT", "DELETE"],
+                            "/api/v1/user/user/": ["GET", "POST", "PUT", "DELETE"],
+                            "/api/v1/perm/roles/": ["GET", "DELETE"],
+                            "/api/v1/user/group/": ["GET", "POST", "PUT", "DELETE"],
+                            "/api/v1/user/users/": ["GET", "DELETE"],
+                            "/api/v1/user/groups/": ["GET", "DELETE"],
+                            "/api/v1/perm/permission/": ["GET", "POST", "PUT", "DELETE"],
+                            "/api/v1/perm/permissions/": ["GET", "DELETE"],
+                            "/api/v1/perm/user-permission-json/": ["GET"]
                         }
                     },
                     "frontend": {
@@ -167,33 +141,15 @@ class Command(BaseCommand):
                 {
                     "backend": {
                         "api": {
-                            "/api/v1/perm/role/": [
-                                "GET"
-                            ],
-                            "/api/v1/user/user/": [
-                                "GET"
-                            ],
-                            "/api/v1/perm/roles/": [
-                                "GET"
-                            ],
-                            "/api/v1/user/group/": [
-                                "GET"
-                            ],
-                            "/api/v1/user/users/": [
-                                "GET"
-                            ],
-                            "/api/v1/user/groups/": [
-                                "GET"
-                            ],
-                            "/api/v1/perm/permission/": [
-                                "GET"
-                            ],
-                            "/api/v1/perm/permissions/": [
-                                "GET"
-                            ],
-                            "/api/v1/perm/user-permission-json/": [
-                                "GET"
-                            ]
+                            "/api/v1/perm/role/": ["GET"],
+                            "/api/v1/user/user/": ["GET"],
+                            "/api/v1/perm/roles/": ["GET"],
+                            "/api/v1/user/group/": ["GET"],
+                            "/api/v1/user/users/": ["GET"],
+                            "/api/v1/user/groups/": ["GET"],
+                            "/api/v1/perm/permission/": ["GET"],
+                            "/api/v1/perm/permissions/": ["GET"],
+                            "/api/v1/perm/user-permission-json/": ["GET"]
                         }
                     },
                     "frontend": {
@@ -226,11 +182,9 @@ class Command(BaseCommand):
                 "初始化创建系统审计日志查看权限",
                 {
                     "backend": {
-                        "api": {
-                            "/api/v1/audit/audit-logs/": [
-                                "GET"
-                            ]
-                        }
+                    "api": {
+                        "/api/v1/audit/audit-logs/": ["GET"]
+                    }
                     },
                     "frontend": {
                         "routes": [
@@ -241,6 +195,36 @@ class Command(BaseCommand):
                         ]
                     }
                 }
+            ),
+            (
+                "chain_montior_admin",
+                "【链路监控】管理员",
+                "初始化创建链路监控管理员权限",
+                {
+                    "backend": {
+                        "api": {
+                        "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"],
+                        "/api/v1/monitor/link/topology/": ["GET"],
+                        "/api/v1/monitor/nodes/": ["GET", "POST", "PUT", "DELETE"],
+                        "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"],
+                        "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
+                        "/api/v1/monitor/alert/": ["GET"],
+                        "/api/v1/monitor/alert-types/": ["GET"],
+                        "/api/v1/monitor/dashboard/": ["GET"]
+                        }
+                    },
+                    "frontend": {
+                        "routes": [
+                            "monitor.dashboard",
+                            "monitor.links",
+                            "monitor.architecture",
+                            "monitor.alerts"
+                        ],
+                        "resources": [
+                            "monitor:createDiagram"
+                        ]
+                    }
+                    }
             )
         ]:
             perm_obj = Permission.objects.filter(code=perm[0]).first()
@@ -252,6 +236,8 @@ class Command(BaseCommand):
                     permission_json=perm[3]
                 )
             if perm[0] in ['system_admin', 'system_audit']:
-                admin_group.permissions.add(perm_obj)
+                system_admin_group.permissions.add(perm_obj)
+            if perm[0] in ['chain_montior_admin']:
+                chain_admin_group.permissions.add(perm_obj)
 
         color_logger.info(f'Admin user check completed. User exists: {admin_user is not None}')

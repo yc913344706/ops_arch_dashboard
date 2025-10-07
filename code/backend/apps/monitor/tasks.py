@@ -419,7 +419,7 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
             # 尝试使用聚合值，如果不可用则使用当前值
             avg_time_value = aggregated_value if aggregated_value is not None else (health_record.response_time if health_record else 0)
             
-            title = rule.message.format(
+            alert_description = rule.message.format(
                 node_name=node.name,
                 avg_response_time=avg_time_value,
                 threshold=threshold_value  # 使用从条件中提取的阈值
@@ -431,8 +431,8 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
                 node=node,
                 alert_type=rule.name.upper().replace('-', '_'),
                 alert_subtype=alert_subtype,
-                title=f"节点 {node.name} {rule.description}",
-                description=title,
+                title=f"节点{rule.description}",
+                description=alert_description,
                 severity=rule.severity
             )
         else:
