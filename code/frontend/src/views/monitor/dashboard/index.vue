@@ -179,8 +179,8 @@ const getStatusType = (status: string) => {
   switch (status?.toUpperCase()) {
     case 'OPEN':
       return 'danger' // 红色，表示开放状态
-    case 'ACKNOWLEDGED':
-      return 'warning' // 黄色，表示已确认
+    case 'SILENCED':
+      return 'warning' // 黄色，表示已静默
     case 'CLOSED':
       return 'success' // 绿色，表示已关闭
     default:
@@ -193,8 +193,8 @@ const getStatusText = (status: string) => {
   switch (status?.toUpperCase()) {
     case 'OPEN':
       return '告警中'
-    case 'ACKNOWLEDGED':
-      return '已确认'
+    case 'SILENCED':
+      return '已静默'
     case 'CLOSED':
       return '已关闭'
     default:
@@ -517,12 +517,12 @@ onUnmounted(() => {
 }
 
 .chart-card, .alert-card {
-  height: 400px;
+  min-height: 400px;
 }
 
 .chart-container {
   width: 100%;
-  height: 350px;
+  min-height: 350px;
 }
 
 .card-header {

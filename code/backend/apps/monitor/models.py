@@ -12,7 +12,7 @@ class Alert(BaseModel):
     STATUS_CHOICES = [
         ('OPEN', 'Open'),
         ('CLOSED', 'Closed'),
-        ('ACKNOWLEDGED', 'Acknowledged'),
+        ('SILENCED', 'Silenced'),
     ]
     
     # 告警类型 - 现在支持动态类型，这里保留一些常用类型
@@ -54,20 +54,21 @@ class Alert(BaseModel):
         related_name='created_alerts', 
         help_text="创建人"
     )
-    acknowledged_by = models.ForeignKey(
+    silenced_by = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True, 
-        related_name='acknowledged_alerts', 
-        help_text="确认人"
+        related_name='silenced_alerts', 
+        help_text="静默人"
     )
     
     # 时间字段
     first_occurred = models.DateTimeField(auto_now_add=True, help_text="首次发生时间")
     last_occurred = models.DateTimeField(auto_now=True, help_text="最后发生时间")
     resolved_at = models.DateTimeField(null=True, blank=True, help_text="解决时间")
-    acknowledged_at = models.DateTimeField(null=True, blank=True, help_text="确认时间")
+    silenced_at = models.DateTimeField(null=True, blank=True, help_text="静默时间")
+    silenced_until = models.DateTimeField(null=True, blank=True, help_text="静默结束时间")
     
     class Meta:
         db_table = 'alert'
@@ -82,14 +83,25 @@ class Alert(BaseModel):
             ),
             models.UniqueConstraint(
                 fields=['node_id', 'alert_type', 'alert_subtype', 'status'],
-                condition=models.Q(status='ACKNOWLEDGED'),
-                name='unique_acknowledged_alert'
+                condition=models.Q(status='SILENCED'),
+                name='unique_silenced_alert'
             ),
         ]
         ordering = ['-first_occurred']
 
     def __str__(self):
         return f"{self.title} - {self.status}"
+
+    # 静默相关字段
+    silenced_reason = models.TextField(null=True, blank=True, help_text="静默原因")
+
+    def is_currently_silenced(self):
+        """
+        检查告警是否正在被静默
+        """
+        if self.status == 'SILENCED' and self.silenced_until:
+            return timezone.now() < self.silenced_until
+        return False
 
 
 class Link(BaseModel):

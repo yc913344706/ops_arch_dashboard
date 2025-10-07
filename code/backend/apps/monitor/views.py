@@ -617,17 +617,19 @@ class AlertView(View):
                     'first_occurred': utc_obj_to_time_zone_str(alert.first_occurred),
                     'last_occurred': utc_obj_to_time_zone_str(alert.last_occurred),
                     'resolved_at': utc_obj_to_time_zone_str(alert.resolved_at) if alert.resolved_at else None,
-                    'acknowledged_at': utc_obj_to_time_zone_str(alert.acknowledged_at) if alert.acknowledged_at else None,
+                    'silenced_at': utc_obj_to_time_zone_str(alert.silenced_at) if alert.silenced_at else None,
+                    'silenced_until': utc_obj_to_time_zone_str(alert.silenced_until) if alert.silenced_until else None,
+                    'silenced_reason': alert.silenced_reason,
                     'created_by': {
                         'uuid': str(alert.created_by.uuid) if alert.created_by else None,
                         'username': alert.created_by.username if alert.created_by else None,
                         'nickname': alert.created_by.nickname if alert.created_by else None
                     } if alert.created_by else None,
-                    'acknowledged_by': {
-                        'uuid': str(alert.acknowledged_by.uuid) if alert.acknowledged_by else None,
-                        'username': alert.acknowledged_by.username if alert.acknowledged_by else None,
-                        'nickname': alert.acknowledged_by.nickname if alert.acknowledged_by else None
-                    } if alert.acknowledged_by else None
+                    'silenced_by': {
+                        'uuid': str(alert.silenced_by.uuid) if alert.silenced_by else None,
+                        'username': alert.silenced_by.username if alert.silenced_by else None,
+                        'nickname': alert.silenced_by.nickname if alert.silenced_by else None
+                    } if alert.silenced_by else None
                 })
             
             return pub_success_response({
@@ -707,7 +709,7 @@ class AlertView(View):
             return pub_error_response(f"创建告警失败: {e.args}")
     
     def put(self, request):
-        """更新告警状态（确认或关闭）"""
+        """更新告警状态（关闭或静默）"""
         try:
             body = pub_get_request_body(request)
             
@@ -719,21 +721,30 @@ class AlertView(View):
 
             # 更新状态
             new_status = body.get('status')
-            if new_status in ['CLOSED', 'ACKNOWLEDGED']:
+            if new_status in ['CLOSED', 'SILENCED']:
                 if new_status == 'CLOSED':
                     alert.status = 'CLOSED'
                     alert.resolved_at = timezone.now()
-                elif new_status == 'ACKNOWLEDGED':
-                    alert.status = 'ACKNOWLEDGED'
-                    alert.acknowledged_at = timezone.now()
+                elif new_status == 'SILENCED':
+                    # 静默操作需要静默时长和原因
+                    silence_duration = body.get('silence_duration')
+                    silence_reason = body.get('silence_reason')
+                    assert silence_duration is not None, '静默时长不能为空'
+                    assert silence_reason is not None and silence_reason.strip() != '', '静默原因不能为空'
                     
-                    # 关联确认人
+                    alert.status = 'SILENCED'
+                    alert.silenced_at = timezone.now()
+                    # 根据静默时长计算结束时间 (静默时长单位为秒)
+                    alert.silenced_until = timezone.now() + timedelta(seconds=int(silence_duration))
+                    alert.silenced_reason = silence_reason
+                    
+                    # 关联静默人
                     user_name = getattr(request, 'user_name', None)
                     if user_name:
                         from apps.user.models import User
                         user = User.objects.filter(username=user_name).first()
                         if user:
-                            alert.acknowledged_by = user
+                            alert.silenced_by = user
 
                 alert.save()
 
@@ -741,6 +752,8 @@ class AlertView(View):
                 'uuid': str(alert.uuid),
                 'status': alert.status
             })
+        except AssertionError as e:
+            return pub_error_response(str(e))
         except Exception as e:
             color_logger.error(f"更新告警失败: {e.args}")
             return pub_error_response(f"更新告警失败: {e.args}")
@@ -782,23 +795,75 @@ class AlertDetailView(View):
                 'first_occurred': alert.first_occurred.isoformat() if alert.first_occurred else None,
                 'last_occurred': alert.last_occurred.isoformat() if alert.last_occurred else None,
                 'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None,
-                'acknowledged_at': alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+                'silenced_at': alert.silenced_at.isoformat() if alert.silenced_at else None,
+                'silenced_until': alert.silenced_until.isoformat() if alert.silenced_until else None,
+                'silenced_reason': alert.silenced_reason,
                 'created_by': {
                     'uuid': str(alert.created_by.uuid) if alert.created_by else None,
                     'username': alert.created_by.username if alert.created_by else None,
                     'nickname': alert.created_by.nickname if alert.created_by else None
                 } if alert.created_by else None,
-                'acknowledged_by': {
-                    'uuid': str(alert.acknowledged_by.uuid) if alert.acknowledged_by else None,
-                    'username': alert.acknowledged_by.username if alert.acknowledged_by else None,
-                    'nickname': alert.acknowledged_by.nickname if alert.acknowledged_by else None
-                } if alert.acknowledged_by else None
+                'silenced_by': {
+                    'uuid': str(alert.silenced_by.uuid) if alert.silenced_by else None,
+                    'username': alert.silenced_by.username if alert.silenced_by else None,
+                    'nickname': alert.silenced_by.nickname if alert.silenced_by else None
+                } if alert.silenced_by else None
             })
         except Alert.DoesNotExist:
             return pub_error_response("告警不存在")
         except Exception as e:
             color_logger.error(f"获取告警详情失败: {e.args}")
             return pub_error_response(f"获取告警详情失败: {e.args}")
+    
+    def put(self, request):
+        """更新告警状态（关闭或静默）"""
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            alert = Alert.objects.filter(uuid=uuid).first()
+            assert alert, '告警不存在'
+
+            # 更新状态
+            new_status = body.get('status')
+            if new_status in ['CLOSED', 'SILENCED']:
+                if new_status == 'CLOSED':
+                    alert.status = 'CLOSED'
+                    alert.resolved_at = timezone.now()
+                elif new_status == 'SILENCED':
+                    # 静默操作需要静默时长和原因
+                    silence_duration = body.get('silence_duration')
+                    silence_reason = body.get('silence_reason')
+                    assert silence_duration is not None, '静默时长不能为空'
+                    assert silence_reason is not None and silence_reason.strip() != '', '静默原因不能为空'
+                    
+                    alert.status = 'SILENCED'
+                    alert.silenced_at = timezone.now()
+                    # 根据静默时长计算结束时间 (静默时长单位为秒)
+                    alert.silenced_until = timezone.now() + timedelta(seconds=int(silence_duration))
+                    alert.silenced_reason = silence_reason
+                    
+                    # 关联静默人
+                    user_name = getattr(request, 'user_name', None)
+                    if user_name:
+                        from apps.user.models import User
+                        user = User.objects.filter(username=user_name).first()
+                        if user:
+                            alert.silenced_by = user
+
+                alert.save()
+
+            return pub_success_response({
+                'uuid': str(alert.uuid),
+                'status': alert.status
+            })
+        except AssertionError as e:
+            return pub_error_response(str(e))
+        except Exception as e:
+            color_logger.error(f"更新告警失败: {e.args}")
+            return pub_error_response(f"更新告警失败: {e.args}")
 
 
 class AlertTypesView(View):

@@ -157,8 +157,22 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
     """
     创建或更新告警
     如果相同的告警已存在且为OPEN状态，则更新最后发生时间
+    检查该告警是否被静默，如果是则不创建或更新
     """
     try:
+        # 检查是否有静默的相同告警
+        silenced_alert = Alert.objects.filter(
+            node_id=str(node.uuid),
+            alert_type=alert_type,
+            alert_subtype=alert_subtype,
+            status='SILENCED'
+        ).first()
+        
+        # 如果存在静默状态的告警且仍在静默期内，则不创建或更新
+        if silenced_alert and silenced_alert.is_currently_silenced():
+            color_logger.info(f"Alert for node {node.name} is silenced until {silenced_alert.silenced_until}, skipping creation/update")
+            return None
+
         # 检查是否已存在相同告警
         existing_alert = Alert.objects.filter(
             node_id=str(node.uuid),
@@ -295,6 +309,7 @@ def evaluate_single_condition(condition_str: str, context: dict, ops: dict) -> b
 def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
     """
     关闭已解决的告警
+    同时处理已静默的告警，如果告警条件已经解决，应结束静默状态
     """
     try:
         filters = {
@@ -313,6 +328,26 @@ def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
             alert.resolved_at = timezone.now()
             alert.save()
             color_logger.info(f"Closed alert {alert.title} for node {node.name}")
+
+        # 处理静默的告警，如果问题已解决，也要将静默的告警关闭
+        silenced_filters = {
+            'node_id': str(node.uuid),
+            'status': 'SILENCED'
+        }
+        if alert_type:
+            silenced_filters['alert_type'] = alert_type
+        if alert_subtype:
+            silenced_filters['alert_subtype'] = alert_subtype
+            
+        silenced_alerts = Alert.objects.filter(**silenced_filters)
+        
+        for alert in silenced_alerts:
+            alert.status = 'CLOSED'
+            alert.resolved_at = timezone.now()
+            alert.silenced_until = timezone.now()  # 既然问题解决了，静默也应结束
+            alert.save()
+            color_logger.info(f"Closed silenced alert {alert.title} for node {node.name} as the issue is resolved")
+            
     except Exception as e:
         color_logger.error(f"Error closing resolved alerts for node {node.name}: {str(e)}")
 
@@ -501,6 +536,9 @@ def check_all_alerts():
     """
     from .models import Node, NodeHealth
     
+    # 首先处理过期的静默告警
+    expire_silenced_alerts()
+    
     # 获取所有启用的告警规则
     enabled_rules = alert_config_parser.get_enabled_rules()
     
@@ -522,5 +560,29 @@ def check_all_alerts():
                 check_alert_conditions(node, recent_health, rule)
     
     color_logger.info(f"Completed alert check for {len(active_nodes)} nodes with {len(enabled_rules)} rules")
+
+
+def expire_silenced_alerts():
+    """
+    自动处理过期的静默告警
+    """
+    from .models import Alert
+    from django.utils import timezone
+    
+    try:
+        # 查找所有静默状态且静默时间已过期的告警
+        expired_silenced_alerts = Alert.objects.filter(
+            status='SILENCED',
+            silenced_until__lt=timezone.now()
+        )
+        
+        for alert in expired_silenced_alerts:
+            # 如果静默期已过，将告警状态改为开放（重新激活）
+            alert.status = 'OPEN'
+            alert.save()
+            color_logger.info(f"Reactivated alert {alert.title} after silence period expired")
+            
+    except Exception as e:
+        color_logger.error(f"Error processing expired silenced alerts: {str(e)}")
 
 

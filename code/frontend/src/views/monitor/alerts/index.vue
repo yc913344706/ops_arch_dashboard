@@ -20,7 +20,7 @@
             <el-select v-model="filterForm.status" placeholder="选择状态" clearable style="width: 120px;">
               <el-option label="开启" value="OPEN" />
               <el-option label="已关闭" value="CLOSED" />
-              <el-option label="已确认" value="ACKNOWLEDGED" />
+              <el-option label="已静默" value="SILENCED" />
             </el-select>
           </el-form-item>
           <el-form-item label="类型">
@@ -79,14 +79,15 @@
         </el-table-column>
         <el-table-column prop="first_occurred" label="首次发生" width="160" />
         <el-table-column prop="last_occurred" label="最后发生" width="160" />
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="250">
           <template #default="scope">
             <el-button 
               size="small" 
-              @click="acknowledgeAlert(scope.row)"
+              type="warning"
+              @click="silenceAlert(scope.row)"
               :disabled="scope.row.status !== 'OPEN'"
             >
-              确认
+              静默
             </el-button>
             <el-button 
               size="small" 
@@ -150,12 +151,14 @@
           <el-descriptions-item label="首次发生">{{ selectedAlert.first_occurred }}</el-descriptions-item>
           <el-descriptions-item label="最后发生">{{ selectedAlert.last_occurred }}</el-descriptions-item>
           <el-descriptions-item label="解决时间">{{ selectedAlert.resolved_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="确认时间">{{ selectedAlert.acknowledged_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="静默时间">{{ selectedAlert.silenced_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="静默结束时间">{{ selectedAlert.silenced_until || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="静默原因">{{ selectedAlert.silenced_reason || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建者">
             {{ selectedAlert.created_by?.nickname || selectedAlert.created_by?.username || '-' }}
           </el-descriptions-item>
-          <el-descriptions-item label="确认者">
-            {{ selectedAlert.acknowledged_by?.nickname || selectedAlert.acknowledged_by?.username || '-' }}
+          <el-descriptions-item label="静默者">
+            {{ selectedAlert.silenced_by?.nickname || selectedAlert.silenced_by?.username || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">
             <pre class="alert-description">{{ selectedAlert.description }}</pre>
@@ -165,6 +168,62 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="closeDetailDialog">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 静默告警对话框 -->
+    <el-dialog 
+      v-model="silenceDialogVisible" 
+      title="静默告警" 
+      width="500px" 
+      :before-close="closeSilenceDialog"
+    >
+      <el-form :model="silenceForm" label-width="100px" ref="silenceFormRef">
+        <el-form-item label="静默时长" required>
+          <el-select v-model="silenceForm.duration" placeholder="选择静默时长" style="width: 100%;">
+            <el-option label="15分钟" :value="900" />
+            <el-option label="30分钟" :value="1800" />
+            <el-option label="1小时" :value="3600" />
+            <el-option label="2小时" :value="7200" />
+            <el-option label="6小时" :value="21600" />
+            <el-option label="12小时" :value="43200" />
+            <el-option label="1天" :value="86400" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+        </el-form-item>
+        <el-form-item 
+          v-if="silenceForm.duration === 'custom'" 
+          label="自定义时长(秒)" 
+          prop="customDuration"
+          :rules="[{ required: true, message: '请输入静默时长', trigger: 'blur' }, { type: 'number', min: 1, message: '时长必须大于0', trigger: 'blur' }]"
+        >
+          <el-input-number 
+            v-model="silenceForm.customDuration" 
+            :min="1" 
+            placeholder="请输入静默时长(秒)"
+            style="width: 100%;"
+          />
+        </el-form-item>
+        <el-form-item 
+          label="静默原因" 
+          prop="reason"
+          :rules="[{ required: true, message: '请输入静默原因', trigger: 'blur' }]"
+        >
+          <el-input 
+            v-model="silenceForm.reason" 
+            type="textarea" 
+            placeholder="请输入静默原因" 
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeSilenceDialog">取消</el-button>
+          <el-button type="primary" @click="confirmSilence">确定</el-button>
         </span>
       </template>
     </el-dialog>
@@ -180,6 +239,7 @@ import { useRouter } from 'vue-router'
 // 定义响应式数据
 const loading = ref(false)
 const detailDialogVisible = ref(false)
+const silenceDialogVisible = ref(false)
 
 // 表格数据
 const alerts = ref<any[]>([])
@@ -209,6 +269,16 @@ const selectedAlert = ref<any>(null)
 
 // 选中的行
 const multipleSelection = ref<any[]>([])
+
+// 静默表单
+const silenceForm = reactive({
+  duration: 3600, // 默认1小时
+  customDuration: null,
+  reason: ''
+})
+
+// 静默表单引用
+const silenceFormRef = ref()
 
 // 获取告警类型列表
 const fetchAlertTypes = async () => {
@@ -310,7 +380,7 @@ const getStatusType = (status: string) => {
   switch (status) {
     case 'OPEN': return 'danger'
     case 'CLOSED': return 'success'
-    case 'ACKNOWLEDGED': return 'info'
+    case 'SILENCED': return 'warning'
     default: return 'info'
   }
 }
@@ -320,7 +390,7 @@ const getStatusLabel = (status: string) => {
   switch (status) {
     case 'OPEN': return '开启'
     case 'CLOSED': return '已关闭'
-    case 'ACKNOWLEDGED': return '已确认'
+    case 'SILENCED': return '已静默'
     default: return status
   }
 }
@@ -347,31 +417,44 @@ const getAlertTypeLabel = (type: string) => {
   }
 }
 
-// 确认告警
-const acknowledgeAlert = async (row: any) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要确认告警 "${row.title}" 吗？`,
-      '提示',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
+// 静默告警
+const silenceAlert = async (row: any) => {
+  selectedAlert.value = row
+  silenceForm.duration = 3600 // 默认1小时
+  silenceForm.customDuration = null
+  silenceForm.reason = ''
+  silenceDialogVisible.value = true
+}
+
+// 确认静默
+const confirmSilence = async () => {
+  if (silenceFormRef.value) {
+    silenceFormRef.value.validate(async (valid: boolean) => {
+      if (valid) {
+        try {
+          let duration = silenceForm.duration
+          if (duration === 'custom') {
+            duration = silenceForm.customDuration
+          }
+          
+          await alertApi.updateAlert({
+            uuid: selectedAlert.value.uuid,
+            status: 'SILENCED',
+            silence_duration: duration,
+            silence_reason: silenceForm.reason
+          })
+          
+          ElMessage.success('告警静默成功')
+          fetchAlerts()
+          closeSilenceDialog()
+        } catch (error) {
+          console.error('告警静默失败:', error)
+          ElMessage.error('告警静默失败')
+        }
+      } else {
+        ElMessage.error('请填写完整的静默信息')
       }
-    )
-    
-    await alertApi.updateAlert({
-      uuid: row.uuid,
-      status: 'ACKNOWLEDGED'
     })
-    
-    ElMessage.success('告警确认成功')
-    fetchAlerts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('确认告警失败:', error)
-      ElMessage.error('确认告警失败')
-    }
   }
 }
 
@@ -413,6 +496,14 @@ const viewAlertDetail = (row: any) => {
 const closeDetailDialog = () => {
   detailDialogVisible.value = false
   selectedAlert.value = null
+}
+
+// 关闭静默对话框
+const closeSilenceDialog = () => {
+  silenceDialogVisible.value = false
+  if (silenceFormRef.value) {
+    silenceFormRef.value.resetFields()
+  }
 }
 
 // 页面挂载时获取数据
