@@ -11,7 +11,7 @@ from django.db.models.functions import RowNumber
 from django.db.models.expressions import Window
 from django.utils import timezone
 from datetime import datetime, timedelta
-
+from django.db.models.expressions import RawSQL
 
 class LinkView(View):
     """架构图相关接口"""
@@ -229,9 +229,16 @@ class NodeView(View):
             
             node_list = Node.objects.all()
             
-            # 添加搜索功能
+            # 添加搜索功能 - 同时按节点名称和basic_info_list中的内容搜索
             if search:
-                node_list = node_list.filter(name__icontains=search)
+                node_list = node_list.annotate(
+                    hosts_str=RawSQL(
+                        "JSON_UNQUOTE(JSON_EXTRACT(basic_info_list, '$[*].host'))", []
+                    )
+                ).filter(
+                    Q(name__icontains=search) |
+                    Q(hosts_str__icontains=search)
+                )
             
             # 按架构图过滤
             if link_id:
@@ -255,8 +262,8 @@ class NodeView(View):
                     'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
-                    'create_time': node.create_time.isoformat() if node.create_time else None,
-                    'update_time': node.update_time.isoformat() if node.update_time else None
+                    'create_time': utc_obj_to_time_zone_str(node.create_time),
+                    'update_time': utc_obj_to_time_zone_str(node.update_time),
                 })
             
             return pub_success_response({

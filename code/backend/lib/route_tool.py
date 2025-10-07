@@ -6,7 +6,7 @@ from lib.log import color_logger
 
 class RouteTool:
     def __init__(self):
-        self.base_routes = self._load_json(os.path.join(BASE_DIR, 'base_routes.json'))
+        self.base_routes = self._load_json(os.path.join(BASE_DIR, 'config','base_routes.json'))
 
     def _load_json(self, file_path: str) -> Dict:
         """加载JSON文件"""

@@ -45,7 +45,7 @@ ops_arch_dashboard/
 
 ### 配置文件
 - 【后端】业务配置：`code/backend/.dev.yaml`
-- 【后端】全量路由定义文件：`code/backend/base_routes.json`
+- 【后端】全量路由定义文件：`code/backend/config/base_routes.json`
 - 【后端】docker环境变量：`code/backend/.dev.env`
 
 ## 环境与部署

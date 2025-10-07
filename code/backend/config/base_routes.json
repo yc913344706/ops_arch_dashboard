@@ -32,6 +32,14 @@
           "keepAlive": true
         }
       },
+      "nodes": {
+        "path": "/monitor/nodes/index",
+        "name": "MonitorNodes",
+        "meta": {
+          "title": "节点管理",
+          "showParent": true
+        }
+      },
       "alerts": {
         "path": "/monitor/alerts/index",
         "name": "MonitorAlerts",
