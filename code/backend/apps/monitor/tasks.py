@@ -143,8 +143,6 @@ def cleanup_health_records():
     """
     清理过期的健康记录
     """
-    from datetime import timedelta
-    from django.utils import timezone
     
     # 删除30天前的健康记录
     cutoff_time = timezone.now() - timedelta(days=30)
@@ -203,7 +201,7 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
             color_logger.info(f"Created new alert for node {node.name}: {title}")
             return alert
     except Exception as e:
-        color_logger.error(f"Error creating or updating alert for node {node.name}: {str(e)}")
+        color_logger.error(f"Error creating or updating alert for node {node.name}: {str(e)}", exc_info=True)
 
 
 def evaluate_condition(condition_str: str, context: dict) -> bool:
@@ -566,8 +564,6 @@ def expire_silenced_alerts():
     """
     自动处理过期的静默告警
     """
-    from .models import Alert
-    from django.utils import timezone
     
     try:
         # 查找所有静默状态且静默时间已过期的告警

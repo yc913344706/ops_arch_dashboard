@@ -2,6 +2,7 @@ from django.db import models
 from lib.model_tools import BaseModel
 from apps.user.models import User
 from apps.monitor.enum import NODE_HEALTH_STATUS_CHOICES
+from django.utils import timezone
 
 
 class Alert(BaseModel):
