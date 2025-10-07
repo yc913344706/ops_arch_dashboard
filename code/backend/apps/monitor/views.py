@@ -6,7 +6,9 @@ from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection, Alert
 from lib.log import color_logger
 from apps.myAuth.token_utils import TokenManager
-from django.db.models import Q, Count, Case, When, IntegerField, Sum
+from django.db.models import Q, Count, Case, When, IntegerField, Sum, F
+from django.db.models.functions import RowNumber
+from django.db.models.expressions import Window
 from django.utils import timezone
 from datetime import datetime, timedelta
 
@@ -983,28 +985,38 @@ class MonitorDashboardView(View):
                 start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
                 end_time = timezone.make_aware(datetime.combine(next_month, datetime.min.time()))
             
-            # 统计各种健康状态的数量
-            green_count = NodeHealth.objects.filter(
-                create_time__gte=start_time,
-                create_time__lt=end_time,
-                healthy_status='green'  # 健康
-            ).count()
-            yellow_count = NodeHealth.objects.filter(
-                create_time__gte=start_time,
-                create_time__lt=end_time,
-                healthy_status='yellow'  # 部分异常
-            ).count()
-            red_count = NodeHealth.objects.filter(
-                create_time__gte=start_time,
-                create_time__lt=end_time,
-                healthy_status='red'  # 异常
-            ).count()
-            unknown_count = NodeHealth.objects.filter(
-                create_time__gte=start_time,
-                create_time__lt=end_time,
-                healthy_status='unknown'  # 未知
-            ).count()
+            # 对于趋势图，我们需要统计在时间段内状态变为特定值的节点数量
+            # 而不是时间段内的最新状态
+            # 比如：在一周内，有60个节点曾经变成red状态，即使它们后来恢复了，这个时间段的red值仍应为60
             
+            # 获取时间段内的所有健康记录
+            records_in_period = NodeHealth.objects.filter(
+                create_time__gte=start_time,
+                create_time__lt=end_time
+            )
+            
+            # 统计各状态的节点数（去重节点ID）
+            green_nodes = set()
+            yellow_nodes = set()
+            red_nodes = set()
+            unknown_nodes = set()
+            
+            for record in records_in_period:
+                node_id = record.node_id
+                if record.healthy_status == 'green':
+                    green_nodes.add(node_id)
+                elif record.healthy_status == 'yellow':
+                    yellow_nodes.add(node_id)
+                elif record.healthy_status == 'red':
+                    red_nodes.add(node_id)
+                elif record.healthy_status == 'unknown':
+                    unknown_nodes.add(node_id)
+            
+            green_count = len(green_nodes)
+            yellow_count = len(yellow_nodes)
+            red_count = len(red_nodes)
+            unknown_count = len(unknown_nodes)
+
             trend_data.append({
                 'date': time_point.isoformat() if isinstance(time_point, datetime) else str(time_point),
                 'green_count': green_count,
