@@ -1048,6 +1048,7 @@ class MonitorDashboardView(View):
                 'title': alert.title,
                 'node_id': alert.node_id,
                 'node_name': node_name,
+                'link_name': node.link.name if node.link else 'Unknown',
                 'level': alert.severity.lower() if alert.severity else 'medium',
                 'time': utc_obj_to_time_zone_str(alert.last_occurred),
                 # 'time': alert.last_occurred.isoformat() if alert.last_occurred else None,

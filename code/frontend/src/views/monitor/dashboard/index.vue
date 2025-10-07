@@ -77,7 +77,8 @@
             >
               <div class="alert-content">
                 <div class="alert-title">{{ alert.title }}</div>
-                <div class="alert-node">{{ alert.description }}</div>
+                <div class="alert-node">告警详情：{{ alert.description }}</div>
+                <div class="alert-time">所属链路：{{ alert.link_name }}</div>
                 <div class="alert-time">最后告警时间：{{ alert.time }}</div>
                 <!-- <div class="alert-time">{{ formatTime(new Date(alert.time)) }}</div> -->
                 <div class="alert-status" :class="`status-${alert.status.toLowerCase()}`">
@@ -229,6 +230,7 @@ const fetchSummaryData = async () => {
         time: alert.time,
         // time: new Date(alert.time),
         status: alert.status,
+        link_name: alert.link_name,
         description: alert.description
       }))
     }
