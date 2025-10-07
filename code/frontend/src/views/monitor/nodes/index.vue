@@ -57,7 +57,7 @@
             <span v-if="!scope.row.basic_info_list || scope.row.basic_info_list.length === 0">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="link.name" label="所属链路" width="200" />
+        <el-table-column prop="link.name" label="所属链路" min-width="200" />
         <el-table-column label="健康状态" width="120">
           <template #default="scope">
             <el-tag 
@@ -65,13 +65,6 @@
               :effect="scope.row.healthy_status === 'red' ? 'dark' : 'light'"
             >
               {{ getHealthStatusText(scope.row.healthy_status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.is_active ? 'success' : 'info'">
-              {{ scope.row.is_active ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
