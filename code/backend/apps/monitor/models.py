@@ -15,15 +15,6 @@ class Alert(BaseModel):
         ('SILENCED', 'Silenced'),
     ]
     
-    # 告警类型 - 现在支持动态类型，这里保留一些常用类型
-    ALERT_TYPE_CHOICES = [
-        ('HEALTH_CHECK_FAILED', 'Health Check Failed'),
-        ('RESPONSE_TIME_SLOW', 'Response Time Slow'),
-        ('SERVICE_UNAVAILABLE', 'Service Unavailable'),
-        ('CONNECTION_TIMEOUT', 'Connection Timeout'),
-        ('PARTIAL_HEALTH_CHECK_FAILED', 'Partial Health Check Failed'),
-    ]
-    
     # 严重程度
     SEVERITY_CHOICES = [
         ('LOW', 'Low'),
@@ -34,7 +25,7 @@ class Alert(BaseModel):
     
     # 唯一标识字段
     node_id = models.CharField(max_length=100, help_text="关联的节点ID")
-    alert_type = models.CharField(max_length=50, choices=ALERT_TYPE_CHOICES, help_text="告警类型")
+    alert_type = models.CharField(max_length=50, help_text="告警类型")
     alert_subtype = models.CharField(max_length=100, blank=True, default="", help_text="告警子类型，用于更细化的分类")
     
     # 告警内容

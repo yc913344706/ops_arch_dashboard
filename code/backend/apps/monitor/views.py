@@ -605,9 +605,11 @@ class AlertView(View):
             # 格式化返回数据
             result_data = []
             for alert in result:
+                node = Node.objects.filter(uuid=alert.node_id).first()
                 result_data.append({
                     'uuid': str(alert.uuid),
                     'node_id': alert.node_id,
+                    'node_name': node.name if node else None,
                     'alert_type': alert.alert_type,
                     'alert_subtype': alert.alert_subtype,
                     'title': alert.title,
@@ -872,21 +874,13 @@ class AlertTypesView(View):
     def get(self, request):
         """获取所有告警类型"""
         try:
-            # 从数据库获取所有唯一的告警类型
-            distinct_alert_types = Alert.objects.values_list('alert_type', flat=True).distinct()
-            
-            # 返回告警类型及其描述
+            # 从配置文件获取所有告警类型
+            from apps.monitor.alert_config_parser import alert_config_parser
             alert_types_with_desc = []
-            for alert_type in distinct_alert_types:
-                # 创建一个带描述的映射
-                desc_map = {
-                    'HEALTH_CHECK_FAILED': '健康检查失败',
-                    'RESPONSE_TIME_SLOW': '响应时间过慢',
-                    'SERVICE_UNAVAILABLE': '服务不可用',
-                    'CONNECTION_TIMEOUT': '连接超时',
-                    'PARTIAL_HEALTH_CHECK_FAILED': '部分健康检查失败'
-                }
-                description = desc_map.get(alert_type, alert_type)
+            
+            # 使用配置解析器获取告警类型映射
+            type_mapping = alert_config_parser.get_alert_type_mapping()
+            for alert_type, description in type_mapping.items():
                 alert_types_with_desc.append({
                     'value': alert_type,
                     'label': description

@@ -2,6 +2,7 @@ import yaml
 import os
 from typing import Dict, Any, List
 from lib.log import color_logger
+from backend.settings import BASE_DIR
 
 
 class AlertRule:
@@ -26,9 +27,8 @@ class AlertConfigParser:
     
     def __init__(self, config_file_path: str = None):
         if config_file_path is None:
-            # 默认配置文件路径
             config_file_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                BASE_DIR, 
                 'config', 
                 'alert_rules.yaml'
             )
@@ -69,30 +69,7 @@ class AlertConfigParser:
     def create_default_config(self):
         """创建默认配置"""
         default_config = {
-            'alerts': {
-                'health_check_failed': {
-                    'enabled': True,
-                    'description': '健康检查失败告警',
-                    'condition': "status == 'red'",
-                    'duration': '1m',
-                    'severity': 'HIGH',
-                    'message': '节点 {node_name} 完全不可用',
-                    'check_interval': '5m',
-                    'data_source': 'node_health'
-                },
-                'response_time_slow': {
-                    'enabled': True,
-                    'description': '响应时间过慢告警',
-                    'condition': 'avg_response_time > 1000',
-                    'duration': '5m',
-                    'severity': 'MEDIUM',
-                    'message': '节点 {node_name} 平均响应时间为 {avg_response_time}ms，超过阈值',
-                    'check_interval': '10m',
-                    'data_source': 'node_health',
-                    'aggregation': 'avg',
-                    'time_window': '5m'
-                }
-            }
+            'alerts': {}
         }
         
         # 确保config目录存在
@@ -108,10 +85,49 @@ class AlertConfigParser:
         # 重新加载配置
         self.parse_alert_rules(default_config.get('alerts', {}))
     
+    def get_alert_type_choices(self):
+        """获取告警类型选择项，用于模型字段"""
+        choices = []
+        for rule_name in self.alert_rules.keys():
+            # 将规则名称转换为大写格式
+            choice_value = rule_name.upper().replace('-', '_')
+            # 使用规则的描述作为显示标签，或生成默认标签
+            rule = self.alert_rules[rule_name]
+            choice_label = rule.description if rule.description else rule_name.replace('_', ' ').title()
+            choices.append((choice_value, choice_label))
+        return choices
+
+    def get_alert_type_mapping(self):
+        """获取告警类型中文映射，用于前端显示"""
+        mapping = {}
+        for rule_name, rule in self.alert_rules.items():
+            # 将规则名称转换为大写格式
+            alert_type = rule_name.upper().replace('-', '_')
+            # 使用规则的描述或生成默认中文标签
+            if rule.description:
+                # 尝试从描述中获取中文名，否则使用默认的规则名中文映射
+                mapping[alert_type] = rule.description
+            else:
+                mapping[alert_type] = "规则定义文件未找到description"
+        return mapping
+
     def reload_config(self):
         """重新加载配置"""
         self.load_config()
 
+
+def get_alert_choices():
+    """
+    获取告警类型的选项列表，用于Django模型字段choices
+    NOTE: 这是动态获取的，但在Django模型中使用时，需要在运行时获取
+    """
+    return alert_config_parser.get_alert_type_choices()
+
+def get_alert_type_mapping():
+    """
+    获取告警类型映射，用于前端显示
+    """
+    return alert_config_parser.get_alert_type_mapping()
 
 # 全局配置解析器实例
 alert_config_parser = AlertConfigParser()

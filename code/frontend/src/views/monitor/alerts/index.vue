@@ -55,7 +55,7 @@
       >
         <el-table-column type="selection" width="55" />
         <el-table-column prop="title" label="标题" width="200" show-overflow-tooltip />
-        <el-table-column prop="node_id" label="节点ID" width="150" show-overflow-tooltip />
+        <el-table-column prop="node_name" label="节点" width="150" show-overflow-tooltip />
         <el-table-column prop="alert_type" label="类型" width="150">
           <template #default="scope">
             <el-tag size="small" :type="getAlertTypeTagType(scope.row.alert_type)">
@@ -288,14 +288,10 @@ const fetchAlertTypes = async () => {
     alertTypes.value = response.data.alert_types || []
   } catch (error) {
     console.error('获取告警类型失败:', error)
-    // 设置默认类型作为备选
-    alertTypes.value = [
-      { value: 'HEALTH_CHECK_FAILED', label: '健康检查失败' },
-      { value: 'RESPONSE_TIME_SLOW', label: '响应时间过慢' },
-      { value: 'SERVICE_UNAVAILABLE', label: '服务不可用' },
-      { value: 'CONNECTION_TIMEOUT', label: '连接超时' },
-      { value: 'PARTIAL_HEALTH_CHECK_FAILED', label: '部分健康检查失败' }
-    ]
+    // 即使获取失败也显示错误信息，而不是提供默认类型
+    // 因为现在告警类型是从配置文件动态获取的
+    ElMessage.error('获取告警类型失败')
+    alertTypes.value = []  // 使用空数组
   } finally {
     loadingAlertTypes.value = false
   }
@@ -397,24 +393,25 @@ const getStatusLabel = (status: string) => {
 
 // 获取告警类型标签类型
 const getAlertTypeTagType = (type: string) => {
-  switch (type) {
-    case 'HEALTH_CHECK_FAILED': return 'danger'
-    case 'RESPONSE_TIME_SLOW': return 'warning'
-    case 'SERVICE_UNAVAILABLE': return 'danger'
-    case 'CONNECTION_TIMEOUT': return 'warning'
-    default: return 'info'
+  // 根据告警类型返回不同的标签颜色
+  // 一般来说，严重问题用danger，一般问题用warning，其他用info
+  if (type.includes('FAILED') || type.includes('UNAVAILABLE') || type.includes('UNREACHABLE')) {
+    return 'danger'
+  } else if (type.includes('SLOW') || type.includes('TIMEOUT') || type.includes('PARTIAL')) {
+    return 'warning'
   }
+  return 'info'
 }
 
 // 获取告警类型标签文本
 const getAlertTypeLabel = (type: string) => {
-  switch (type) {
-    case 'HEALTH_CHECK_FAILED': return '健康检查失败'
-    case 'RESPONSE_TIME_SLOW': return '响应时间过慢'
-    case 'SERVICE_UNAVAILABLE': return '服务不可用'
-    case 'CONNECTION_TIMEOUT': return '连接超时'
-    default: return type
+  // 在已获取的告警类型中查找对应的标签
+  const alertType = alertTypes.value.find(item => item.value === type)
+  if (alertType) {
+    return alertType.label
   }
+  // 如果没有找到，返回原始值
+  return type
 }
 
 // 静默告警
