@@ -12,10 +12,22 @@
           <el-form-item label="搜索">
             <el-input 
               v-model="filterForm.search" 
-              placeholder="输入节点名称或主机信息" 
+              placeholder="输入节点名称/主机Host/主机Port" 
               clearable
               style="width: 300px;"
               @keyup.enter="fetchNodes" />
+          </el-form-item>
+          <el-form-item label="健康状态">
+            <el-select 
+              v-model="filterForm.healthy_status" 
+              placeholder="选择健康状态" 
+              clearable
+              style="width: 150px;">
+              <el-option label="未知" value="unknown" />
+              <el-option label="健康" value="green" />
+              <el-option label="部分异常" value="yellow" />
+              <el-option label="严重异常" value="red" />
+            </el-select>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="fetchNodes">搜索</el-button>
@@ -31,6 +43,16 @@
             <div v-for="(info, index) in scope.row.basic_info_list" :key="index" class="host-info">
               <span v-if="info.host">主机: {{ info.host }}</span>
               <span v-if="info.port" class="port-info">端口: {{ info.port }}</span>
+              <el-tag 
+                v-if="typeof info.is_healthy !== 'undefined'"
+                :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
+                size="small"
+                style="width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; display: flex; align-items: center; justify-content: center;"
+              >
+                <span v-if="info.is_healthy === true" style="font-size: 12px;">✓</span>
+                <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
+                <span v-else style="font-size: 12px;">?</span>
+              </el-tag>
             </div>
             <span v-if="!scope.row.basic_info_list || scope.row.basic_info_list.length === 0">-</span>
           </template>
@@ -93,7 +115,8 @@ const pagination = reactive({
 
 // 筛选表单
 const filterForm = reactive({
-  search: ''
+  search: '',
+  healthy_status: ''
 })
 
 // 获取节点列表
@@ -103,7 +126,8 @@ const fetchNodes = async () => {
     const params = {
       page: pagination.currentPage,
       page_size: pagination.pageSize,
-      search: filterForm.search
+      search: filterForm.search,
+      healthy_status: filterForm.healthy_status
     }
     const response = await nodeApi.getNodes(params)
     nodes.value = response.data.data || []
@@ -119,6 +143,7 @@ const fetchNodes = async () => {
 // 重置筛选条件
 const resetFilter = () => {
   filterForm.search = ''
+  filterForm.healthy_status = ''
   fetchNodes()
 }
 
@@ -185,6 +210,8 @@ onMounted(() => {
 
 .host-info {
   margin-bottom: 4px;
+  display: flex;
+  gap: 10px;
 }
 
 .port-info {

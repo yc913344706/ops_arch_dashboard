@@ -226,6 +226,7 @@ class NodeView(View):
             page_size = int(body.get('page_size', 20))
             search = body.get('search', '')
             link_id = body.get('link_id', '')
+            healthy_status = body.get('healthy_status', '')
             
             node_list = Node.objects.all()
             
@@ -234,11 +235,19 @@ class NodeView(View):
                 node_list = node_list.annotate(
                     hosts_str=RawSQL(
                         "JSON_UNQUOTE(JSON_EXTRACT(basic_info_list, '$[*].host'))", []
+                    ),
+                    port_str=RawSQL(
+                        "JSON_UNQUOTE(JSON_EXTRACT(basic_info_list, '$[*].port'))", []
                     )
                 ).filter(
                     Q(name__icontains=search) |
-                    Q(hosts_str__icontains=search)
+                    Q(hosts_str__icontains=search) |
+                    Q(port_str__icontains=search)
                 )
+            
+            # 按健康状态过滤
+            if healthy_status:
+                node_list = node_list.filter(healthy_status=healthy_status)
             
             # 按架构图过滤
             if link_id:
