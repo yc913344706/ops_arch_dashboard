@@ -31,7 +31,7 @@
             <div class="summary-item">
               <div class="summary-number">
                 <div :style="{ color: summary.yellowNodeCount > 0 ? '#faad14' : '#333' }">{{ summary.yellowNodeCount }}</div>/
-                <div :style="{ color: summary.redNodeCount > 0 ? '#ff4d4f' : '#333' }">{{ summary.redNodeCount }}</div>/
+                <div :style="{ color: summary.redNodeCount > 0 ? '#ff4d4f' : '#333' }">{{ summary.redNodeCount }}</div>
               </div>
               <div class="summary-label">部分异常/严重异常节点</div>
             </div>
@@ -217,16 +217,20 @@ const initHealthChart = () => {
   
   // 初始时使用默认数据
   const dates = []
-  const healthyData = []
-  const unhealthyData = []
+  const greenData = []
+  const yellowData = []
+  const redData = []
+  const unknownData = []
   
   // 默认显示最近7天的空数据
   for (let i = 6; i >= 0; i--) {
     const date = new Date()
     date.setDate(date.getDate() - i)
     dates.push(`${date.getMonth() + 1}-${date.getDate()}`)
-    healthyData.push(0)
-    unhealthyData.push(0)
+    greenData.push(0)
+    yellowData.push(0)
+    redData.push(0)
+    unknownData.push(0)
   }
   
   const option = {
@@ -234,7 +238,7 @@ const initHealthChart = () => {
       trigger: 'axis'
     },
     legend: {
-      data: ['健康节点', '异常节点']
+      data: ['健康', '部分异常', '严重异常', '未知']
     },
     xAxis: {
       type: 'category',
@@ -245,23 +249,43 @@ const initHealthChart = () => {
     },
     series: [
       {
-        name: '健康节点',
+        name: '健康',
         type: 'line',
         stack: '总量',
-        data: healthyData,
+        data: greenData,
         smooth: true,
         itemStyle: {
-          color: '#52c41a'
+          color: '#52c41a' // 绿色
         }
       },
       {
-        name: '异常节点',
+        name: '部分异常',
         type: 'line',
         stack: '总量',
-        data: unhealthyData,
+        data: yellowData,
         smooth: true,
         itemStyle: {
-          color: '#ff4d4f'
+          color: '#faad14' // 黄色
+        }
+      },
+      {
+        name: '严重异常',
+        type: 'line',
+        stack: '总量',
+        data: redData,
+        smooth: true,
+        itemStyle: {
+          color: '#ff4d4f' // 红色
+        }
+      },
+      {
+        name: '未知',
+        type: 'line',
+        stack: '总量',
+        data: unknownData,
+        smooth: true,
+        itemStyle: {
+          color: '#ccc' // 灰色
         }
       }
     ]
@@ -427,11 +451,24 @@ onUnmounted(() => {
   font-size: 24px;
   font-weight: bold;
   margin-bottom: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-number > div {
+  display: inline-block;
 }
 
 .summary-label {
   font-size: 14px;
+  font-weight: bold;
   color: #666;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
 }
 
 .dashboard-content {
