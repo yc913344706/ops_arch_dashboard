@@ -886,22 +886,25 @@ class MonitorDashboardView(View):
             # 使用传入的日期范围
             start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            # 转换为本地时区时间
+            start_date = timezone.localtime(timezone.make_aware(start_date)) if start_date.tzinfo is None else timezone.localtime(start_date)
+            end_date = timezone.localtime(timezone.make_aware(end_date)) if end_date.tzinfo is None else timezone.localtime(end_date)
         else:
             # 根据周期参数确定时间范围
             if period == 'day':
-                start_date = now - timedelta(days=1)
+                start_date = timezone.localtime(now) - timedelta(days=1)
             elif period == 'week':
-                start_date = now - timedelta(weeks=1)
+                start_date = timezone.localtime(now) - timedelta(weeks=1)
             elif period == 'month':
-                start_date = now - timedelta(days=30)
+                start_date = timezone.localtime(now) - timedelta(days=30)
             elif period == 'quarter':
-                start_date = now - timedelta(days=90)
+                start_date = timezone.localtime(now) - timedelta(days=90)
             elif period == 'year':
-                start_date = now - timedelta(days=365)
+                start_date = timezone.localtime(now) - timedelta(days=365)
             else:
                 # 默认为周
-                start_date = now - timedelta(weeks=1)
-            end_date = now
+                start_date = timezone.localtime(now) - timedelta(weeks=1)
+            end_date = timezone.localtime(now)
         
         # 生成时间序列
         # 确定间隔以生成适当数量的数据点
@@ -1046,7 +1049,8 @@ class MonitorDashboardView(View):
                 'node_id': alert.node_id,
                 'node_name': node_name,
                 'level': alert.severity.lower() if alert.severity else 'medium',
-                'time': alert.last_occurred.isoformat() if alert.last_occurred else None,
+                'time': utc_obj_to_time_zone_str(alert.last_occurred),
+                # 'time': alert.last_occurred.isoformat() if alert.last_occurred else None,
                 'status': alert.status,
                 'severity': alert.severity,
                 'description': alert.description

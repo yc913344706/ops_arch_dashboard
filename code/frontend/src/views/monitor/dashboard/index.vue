@@ -47,13 +47,13 @@
             <div class="card-header">
               <span>健康状态趋势</span>
               <div class="time-filter">
-                <el-select v-model="timePeriod" placeholder="选择时间范围" @change="onTimePeriodChange">
-                  <el-option label="日" value="day"></el-option>
-                  <el-option label="周" value="week"></el-option>
-                  <el-option label="月" value="month"></el-option>
-                  <el-option label="季" value="quarter"></el-option>
-                  <el-option label="年" value="year"></el-option>
-                </el-select>
+                <el-radio-group v-model="timePeriod" size="small" @change="onTimePeriodChange">
+                  <el-radio-button label="day">日</el-radio-button>
+                  <el-radio-button label="week">周</el-radio-button>
+                  <el-radio-button label="month">月</el-radio-button>
+                  <el-radio-button label="quarter">季</el-radio-button>
+                  <el-radio-button label="year">年</el-radio-button>
+                </el-radio-group>
               </div>
             </div>
           </template>
@@ -77,8 +77,9 @@
             >
               <div class="alert-content">
                 <div class="alert-title">{{ alert.title }}</div>
-                <div class="alert-node">{{ alert.nodeName }}</div>
-                <div class="alert-time">{{ formatTime(alert.time) }}</div>
+                <!-- <div class="alert-node">节点: {{ alert.nodeName }}</div> -->
+                <div class="alert-time">{{ alert.time }}</div>
+                <!-- <div class="alert-time">{{ formatTime(alert.time) }}</div> -->
               </div>
             </div>
             
@@ -142,7 +143,7 @@ const summary = ref({
 })
 
 const recentAlerts = ref([])
-const timePeriod = ref('week') // 默认时间范围
+const timePeriod = ref('day') // 默认时间范围
 
 const healthChartRef = ref<HTMLElement>()
 let healthChartInstance: any = null
@@ -188,7 +189,8 @@ const fetchSummaryData = async () => {
         title: alert.title,
         nodeName: alert.node_name,
         level: alert.severity.toLowerCase(),
-        time: new Date(alert.time),
+        time: alert.time,
+        // time: new Date(alert.time),
         status: alert.status,
         description: alert.description
       }))
