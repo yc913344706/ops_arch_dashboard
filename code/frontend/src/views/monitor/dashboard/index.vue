@@ -13,16 +13,27 @@
               <div class="summary-label">节点总数</div>
             </div>
             <div class="summary-item">
-              <div class="summary-number" :style="{ color: summary.healthyNodeCount > 0 ? '#52c41a' : '#333' }">
-                {{ summary.healthyNodeCount }}
+              <!-- 
+              https://www.coloraa.com/333333
+              #52c41a -- 绿色
+              #333 -- 黑色
+              #ff4d4f -- 红色
+              #faad14 -- 黄色
+              #a9a9a9 -- 深灰色
+              -->
+              <div class="summary-number">
+                <div :style="{ color: summary.healthyNodeCount > 0 ? '#52c41a' : '#333' }">{{ summary.healthyNodeCount }}</div>/
+                <div :style="{ color: summary.unknownNodeCount > 0 ? '#a9a9a9' : '#333' }">{{ summary.unknownNodeCount }}</div>
               </div>
-              <div class="summary-label">健康节点</div>
+              <div class="summary-label">健康/无主机节点</div>
             </div>
+            
             <div class="summary-item">
-              <div class="summary-number" :style="{ color: summary.unhealthyNodeCount > 0 ? '#ff4d4f' : '#333' }">
-                {{ summary.unhealthyNodeCount }}
+              <div class="summary-number">
+                <div :style="{ color: summary.yellowNodeCount > 0 ? '#faad14' : '#333' }">{{ summary.yellowNodeCount }}</div>/
+                <div :style="{ color: summary.redNodeCount > 0 ? '#ff4d4f' : '#333' }">{{ summary.redNodeCount }}</div>/
               </div>
-              <div class="summary-label">异常节点</div>
+              <div class="summary-label">部分异常/严重异常节点</div>
             </div>
           </div>
         </el-card>
@@ -35,6 +46,15 @@
           <template #header>
             <div class="card-header">
               <span>健康状态趋势</span>
+              <div class="time-filter">
+                <el-select v-model="timePeriod" placeholder="选择时间范围" @change="onTimePeriodChange">
+                  <el-option label="日" value="day"></el-option>
+                  <el-option label="周" value="week"></el-option>
+                  <el-option label="月" value="month"></el-option>
+                  <el-option label="季" value="quarter"></el-option>
+                  <el-option label="年" value="year"></el-option>
+                </el-select>
+              </div>
             </div>
           </template>
           <div ref="healthChartRef" class="chart-container"></div>
@@ -105,7 +125,7 @@ import { useRouter } from 'vue-router'
 import { Connection, Monitor, Setting } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { linkApi, nodeApi } from '@/api/monitor'
+import { dashboardApi, linkApi, nodeApi } from '@/api/monitor'
 
 // 路由实例
 const router = useRouter()
@@ -115,32 +135,14 @@ const summary = ref({
   architectureCount: 0,
   nodeCount: 0,
   healthyNodeCount: 0,
-  unhealthyNodeCount: 0
+  unknownNodeCount: 0,
+  unhealthyNodeCount: 0,
+  yellowNodeCount: 0, // 部分异常节点
+  redNodeCount: 0 // 严重异常节点
 })
 
-const recentAlerts = ref([
-  {
-    id: '1',
-    title: '节点连接失败',
-    nodeName: 'Web Server 01',
-    level: 'error',
-    time: new Date(Date.now() - 1000 * 60 * 5) // 5分钟前
-  },
-  {
-    id: '2',
-    title: '响应时间超阈值',
-    nodeName: 'Database Master',
-    level: 'warning',
-    time: new Date(Date.now() - 1000 * 60 * 15) // 15分钟前
-  },
-  {
-    id: '3',
-    title: '节点恢复正常',
-    nodeName: 'Cache Server 02',
-    level: 'success',
-    time: new Date(Date.now() - 1000 * 60 * 30) // 30分钟前
-  }
-])
+const recentAlerts = ref([])
+const timePeriod = ref('week') // 默认时间范围
 
 const healthChartRef = ref<HTMLElement>()
 let healthChartInstance: any = null
@@ -164,19 +166,47 @@ const formatTime = (time: Date) => {
 // 获取概览数据
 const fetchSummaryData = async () => {
   try {
-    // 获取架构图数量
-    const linkResponse = await linkApi.getLinks({})
-    summary.value.architectureCount = linkResponse.data.count || linkResponse.data.length || 0
+    // 获取仪表板统计数据
+    const dashboardResponse = await dashboardApi.getDashboardStats({period: timePeriod.value})
+    const data = dashboardResponse.data
     
-    // 获取节点统计数据
-    // 这里需要后端提供统计API，暂且模拟
-    summary.value.nodeCount = 45
-    summary.value.healthyNodeCount = 42
-    summary.value.unhealthyNodeCount = 3
+    // 更新概览数据
+    if (data && data.summary) {
+      summary.value.architectureCount = data.summary.total_links || 0
+      summary.value.nodeCount = data.summary.total_nodes || 0
+      summary.value.healthyNodeCount = data.summary.healthy_nodes || 0
+      summary.value.unknownNodeCount = data.summary.unknown_nodes || 0
+      summary.value.yellowNodeCount = data.summary.yellow_nodes || 0
+      summary.value.redNodeCount = data.summary.red_nodes || 0
+      summary.value.unhealthyNodeCount = data.summary.unhealthy_nodes || 0  // 不健康节点（yellow + red）
+    }
+    
+    // 更新最近告警数据
+    if (data && data.recent_alerts) {
+      recentAlerts.value = data.recent_alerts.map(alert => ({
+        id: alert.id,
+        title: alert.title,
+        nodeName: alert.node_name,
+        level: alert.severity.toLowerCase(),
+        time: new Date(alert.time),
+        status: alert.status,
+        description: alert.description
+      }))
+    }
+    
+    // 更新健康趋势图表
+    if (data && data.health_trend && data.health_trend.data) {
+      updateHealthChart(data.health_trend.data)
+    }
   } catch (error) {
-    console.error('获取概览数据失败:', error)
-    ElMessage.error('获取概览数据失败')
+    console.error('获取仪表板数据失败:', error)
+    ElMessage.error('获取仪表板数据失败')
   }
+}
+
+// 时间范围选择变化事件
+const onTimePeriodChange = () => {
+  fetchSummaryData()
 }
 
 // 初始化健康状态图表
@@ -185,22 +215,18 @@ const initHealthChart = () => {
   
   healthChartInstance = echarts.init(healthChartRef.value)
   
-  // 模拟健康状态数据
+  // 初始时使用默认数据
   const dates = []
   const healthyData = []
   const unhealthyData = []
   
+  // 默认显示最近7天的空数据
   for (let i = 6; i >= 0; i--) {
     const date = new Date()
     date.setDate(date.getDate() - i)
     dates.push(`${date.getMonth() + 1}-${date.getDate()}`)
-    
-    // 模拟数据
-    const healthy = Math.floor(Math.random() * 20) + 30
-    const unhealthy = Math.floor(Math.random() * 5)
-    
-    healthyData.push(healthy)
-    unhealthyData.push(unhealthy)
+    healthyData.push(0)
+    unhealthyData.push(0)
   }
   
   const option = {
@@ -245,6 +271,92 @@ const initHealthChart = () => {
   
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
+}
+
+// 更新健康状态图表
+const updateHealthChart = (trendData) => {
+  if (!healthChartInstance) return
+  
+  // 提取日期和各种健康状态数据
+  const dates = trendData.map(item => {
+    // 根据数据格式调整日期显示格式
+    let dateStr = item.date
+    if (timePeriod.value === 'day') {
+      // 如果是按小时显示，保留时间部分
+      return dateStr.slice(11, 16) // 取 HH:MM 部分
+    } else if (timePeriod.value === 'year') {
+      // 如果是按年显示，显示年月
+      return dateStr.slice(0, 7) // 取 YYYY-MM 部分
+    } else {
+      // 其他情况显示月日
+      return dateStr.slice(5, 10) // 取 MM-DD 部分
+    }
+  })
+  
+  const greenData = trendData.map(item => item.green_count)
+  const yellowData = trendData.map(item => item.yellow_count)
+  const redData = trendData.map(item => item.red_count)
+  const unknownData = trendData.map(item => item.unknown_count)
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis'
+    },
+    legend: {
+      data: ['健康', '部分异常', '严重异常', '未知']
+    },
+    xAxis: {
+      type: 'category',
+      data: dates
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '健康',
+        type: 'line',
+        stack: '总量',
+        data: greenData,
+        smooth: true,
+        itemStyle: {
+          color: '#52c41a' // 绿色
+        }
+      },
+      {
+        name: '部分异常',
+        type: 'line',
+        stack: '总量',
+        data: yellowData,
+        smooth: true,
+        itemStyle: {
+          color: '#faad14' // 黄色
+        }
+      },
+      {
+        name: '严重异常',
+        type: 'line',
+        stack: '总量',
+        data: redData,
+        smooth: true,
+        itemStyle: {
+          color: '#ff4d4f' // 红色
+        }
+      },
+      {
+        name: '未知',
+        type: 'line',
+        stack: '总量',
+        data: unknownData,
+        smooth: true,
+        itemStyle: {
+          color: '#ccc' // 灰色
+        }
+      }
+    ]
+  }
+  
+  healthChartInstance.setOption(option)
 }
 
 // 处理窗口大小变化
@@ -302,10 +414,13 @@ onUnmounted(() => {
   justify-content: space-around;
   align-items: center;
   height: 100%;
+  flex-wrap: wrap;
 }
 
 .summary-item {
   text-align: center;
+  flex: 1;
+  min-width: 120px;
 }
 
 .summary-number {
@@ -330,6 +445,19 @@ onUnmounted(() => {
 .chart-container {
   width: 100%;
   height: 350px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.time-filter {
+  display: inline-block;
 }
 
 .alert-list {
@@ -416,12 +544,6 @@ onUnmounted(() => {
   display: block;
   margin-top: 10px;
   font-size: 14px;
-  color: #333;
-}
-
-.card-header {
-  font-size: 16px;
-  font-weight: bold;
   color: #333;
 }
 </style>

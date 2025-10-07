@@ -6,8 +6,9 @@ from lib.paginator_tool import pub_paging_tool
 from .models import Link, Node, NodeHealth, NodeConnection, Alert
 from lib.log import color_logger
 from apps.myAuth.token_utils import TokenManager
-from django.db.models import Q
+from django.db.models import Q, Count, Case, When, IntegerField, Sum
 from django.utils import timezone
+from datetime import datetime, timedelta
 
 
 class LinkView(View):
@@ -814,3 +815,229 @@ class AlertTypesView(View):
         except Exception as e:
             color_logger.error(f"获取告警类型失败: {e.args}")
             return pub_error_response(f"获取告警类型失败: {e.args}")
+
+
+class MonitorDashboardView(View):
+    """监控仪表板统计信息接口"""
+    
+    def get(self, request):
+        """获取监控仪表板统计信息"""
+        try:
+            body = pub_get_request_body(request)
+            
+            # 获取筛选参数
+            period = body.get('period', 'week')  # 默认为周
+            start_date = body.get('start_date')
+            end_date = body.get('end_date')
+            
+            # 基础统计信息
+            summary_data = self.get_summary_statistics()
+            
+            # 健康趋势数据
+            health_trend_data = self.get_health_trend_data(period, start_date, end_date)
+            
+            # 最近告警数据
+            recent_alerts = self.get_recent_alerts()
+            
+            return pub_success_response({
+                'summary': summary_data,
+                'health_trend': health_trend_data,
+                'recent_alerts': recent_alerts
+            })
+        except Exception as e:
+            color_logger.error(f"获取监控仪表板数据失败: {e.args}")
+            return pub_error_response(f"获取监控仪表板数据失败: {e.args}")
+    
+    def get_summary_statistics(self):
+        """获取概要统计信息"""
+        # 链路统计
+        total_links = Link.objects.count()
+        # 假设健康链路是包含至少一个健康节点的链路
+        links_with_healthy_nodes = Link.objects.filter(
+            nodes__healthy_status='green',
+            nodes__is_active=True
+        ).distinct().count()
+        
+        # 节点统计
+        total_nodes = Node.objects.count()
+        healthy_nodes = Node.objects.filter(healthy_status='green', is_active=True).count()
+        yellow_nodes = Node.objects.filter(healthy_status='yellow', is_active=True).count()  # 部分异常
+        red_nodes = Node.objects.filter(healthy_status='red', is_active=True).count()  # 异常
+        unknown_nodes = Node.objects.filter(healthy_status='unknown', is_active=True).count()  # 未知
+        
+        return {
+            'total_links': total_links,
+            'healthy_links': links_with_healthy_nodes,
+            'total_nodes': total_nodes,
+            'healthy_nodes': healthy_nodes,
+            'yellow_nodes': yellow_nodes,  # 部分异常节点
+            'red_nodes': red_nodes,  # 异常节点
+            'unknown_nodes': unknown_nodes,  # 未知节点
+            'unhealthy_nodes': yellow_nodes + red_nodes  # 不健康节点（黄色+红色）
+        }
+    
+    def get_health_trend_data(self, period='week', start_date=None, end_date=None):
+        """获取健康趋势数据"""
+        # 根据周期参数确定时间范围
+        now = timezone.now()
+        if start_date and end_date:
+            # 使用传入的日期范围
+            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        else:
+            # 根据周期参数确定时间范围
+            if period == 'day':
+                start_date = now - timedelta(days=1)
+            elif period == 'week':
+                start_date = now - timedelta(weeks=1)
+            elif period == 'month':
+                start_date = now - timedelta(days=30)
+            elif period == 'quarter':
+                start_date = now - timedelta(days=90)
+            elif period == 'year':
+                start_date = now - timedelta(days=365)
+            else:
+                # 默认为周
+                start_date = now - timedelta(weeks=1)
+            end_date = now
+        
+        # 生成时间序列
+        # 确定间隔以生成适当数量的数据点
+        time_points = []
+        if period == 'day':
+            # 按小时统计
+            current_time = start_date
+            while current_time <= end_date:
+                time_points.append(current_time)
+                current_time += timedelta(hours=1)
+        elif period in ['week', 'month']:
+            # 按天统计
+            current_date = start_date.date()
+            end_date_date = end_date.date()
+            while current_date <= end_date_date:
+                time_points.append(current_date)
+                current_date += timedelta(days=1)
+        elif period == 'quarter':
+            # 按周统计
+            current_date = start_date.date()
+            end_date_date = end_date.date()
+            while current_date <= end_date_date:
+                time_points.append(current_date)
+                current_date += timedelta(weeks=1)
+        else:  # year
+            # 按月统计
+            current_date = start_date.date()
+            end_date_date = end_date.date()
+            while current_date <= end_date_date:
+                time_points.append(current_date)
+                # 移动到下个月
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    if current_date.month == 1:
+                        current_date = current_date.replace(month=2)
+                    elif current_date.month == 2:
+                        # 处理2月的天数变化
+                        if current_date.day > 28:
+                            current_date = current_date.replace(day=28)
+                        current_date = current_date.replace(month=3)
+                    elif current_date.month == 3:
+                        current_date = current_date.replace(month=4)
+                    elif current_date.month == 4:
+                        current_date = current_date.replace(month=5)
+                    elif current_date.month == 5:
+                        current_date = current_date.replace(month=6)
+                    elif current_date.month == 6:
+                        current_date = current_date.replace(month=7)
+                    elif current_date.month == 7:
+                        current_date = current_date.replace(month=8)
+                    elif current_date.month == 8:
+                        current_date = current_date.replace(month=9)
+                    elif current_date.month == 9:
+                        current_date = current_date.replace(month=10)
+                    elif current_date.month == 10:
+                        current_date = current_date.replace(month=11)
+                    elif current_date.month == 11:
+                        current_date = current_date.replace(month=12)
+        
+        # 获取健康数据
+        trend_data = []
+        for time_point in time_points:
+            if period == 'day':
+                # 按小时统计
+                start_time = timezone.make_aware(datetime.combine(time_point.date(), time_point.time()))
+                end_time = start_time + timedelta(hours=1)
+            elif period in ['week', 'month']:
+                # 按天统计
+                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
+                end_time = start_time + timedelta(days=1)
+            elif period == 'quarter':
+                # 按周统计
+                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
+                end_time = start_time + timedelta(weeks=1)
+            else:  # year, 按月统计
+                if time_point.month == 12:
+                    next_month = time_point.replace(year=time_point.year + 1, month=1)
+                else:
+                    next_month = time_point.replace(month=time_point.month + 1)
+                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
+                end_time = timezone.make_aware(datetime.combine(next_month, datetime.min.time()))
+            
+            # 统计各种健康状态的数量
+            green_count = NodeHealth.objects.filter(
+                create_time__gte=start_time,
+                create_time__lt=end_time,
+                healthy_status='green'  # 健康
+            ).count()
+            yellow_count = NodeHealth.objects.filter(
+                create_time__gte=start_time,
+                create_time__lt=end_time,
+                healthy_status='yellow'  # 部分异常
+            ).count()
+            red_count = NodeHealth.objects.filter(
+                create_time__gte=start_time,
+                create_time__lt=end_time,
+                healthy_status='red'  # 异常
+            ).count()
+            unknown_count = NodeHealth.objects.filter(
+                create_time__gte=start_time,
+                create_time__lt=end_time,
+                healthy_status='unknown'  # 未知
+            ).count()
+            
+            trend_data.append({
+                'date': time_point.isoformat() if isinstance(time_point, datetime) else str(time_point),
+                'green_count': green_count,
+                'yellow_count': yellow_count,
+                'red_count': red_count,
+                'unknown_count': unknown_count
+            })
+        
+        return {
+            'period': period,
+            'data': trend_data
+        }
+    
+    def get_recent_alerts(self):
+        """获取最近告警"""
+        recent_alerts = Alert.objects.filter().order_by('-last_occurred')[:10]
+        
+        result = []
+        for alert in recent_alerts:
+            # 尝试获取关联的节点名称
+            node = Node.objects.filter(uuid=alert.node_id).first()
+            node_name = node.name if node else f'Node {alert.node_id}'
+            
+            result.append({
+                'id': str(alert.uuid),
+                'title': alert.title,
+                'node_id': alert.node_id,
+                'node_name': node_name,
+                'level': alert.severity.lower() if alert.severity else 'medium',
+                'time': alert.last_occurred.isoformat() if alert.last_occurred else None,
+                'status': alert.status,
+                'severity': alert.severity,
+                'description': alert.description
+            })
+        
+        return result

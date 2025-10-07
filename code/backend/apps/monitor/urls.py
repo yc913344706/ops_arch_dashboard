@@ -20,4 +20,7 @@ urlpatterns = [
     path('alerts/', views.AlertView.as_view(), name='alert-list'),
     path('alert/', views.AlertDetailView.as_view(), name='alert-detail'),
     path('alert-types/', views.AlertTypesView.as_view(), name='alert-types'),
+    
+    # 监控仪表板统计接口
+    path('dashboard/', views.MonitorDashboardView.as_view(), name='monitor-dashboard'),
 ]

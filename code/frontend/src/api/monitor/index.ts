@@ -31,6 +31,9 @@ const monitorApiMap = {
   updateAlert: '/monitor/alert/',
   deleteAlert: '/monitor/alert/',
   getAlertTypes: '/monitor/alert-types/',
+  
+  // 监控仪表板相关API
+  getDashboardStats: '/monitor/dashboard/',
 }
 
 // 链路相关API
@@ -106,4 +109,10 @@ export const alertApi = {
   
   // 获取告警类型
   getAlertTypes: (params?: any) => http.request('get', monitorApiMap.getAlertTypes, { params })
+}
+
+// 监控仪表板相关API
+export const dashboardApi = {
+  // 获取仪表板统计信息
+  getDashboardStats: (params?: any) => http.request('get', monitorApiMap.getDashboardStats, { params })
 }

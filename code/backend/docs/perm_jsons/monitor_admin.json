@@ -7,7 +7,8 @@
       "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"],
       "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
       "/api/v1/monitor/alert/": ["GET"],
-      "/api/v1/monitor/alert-types/": ["GET"]
+      "/api/v1/monitor/alert-types/": ["GET"],
+      "/api/v1/monitor/dashboard/": ["GET"]
     }
   },
   "frontend": {
