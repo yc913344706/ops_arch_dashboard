@@ -8,7 +8,8 @@
       "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
       "/api/v1/monitor/alert/": ["GET", "PUT"],
       "/api/v1/monitor/alert-types/": ["GET"],
-      "/api/v1/monitor/dashboard/": ["GET"]
+      "/api/v1/monitor/dashboard/": ["GET"],
+      "/api/v1/monitor/system_health_stats/": ["GET"]
     }
   },
   "frontend": {

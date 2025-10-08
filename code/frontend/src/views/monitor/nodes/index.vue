@@ -69,6 +69,17 @@
           </template>
         </el-table-column>
         <el-table-column prop="create_time" label="创建时间" width="180" />
+        <el-table-column label="操作" width="150">
+          <template #default="scope">
+            <el-button 
+              size="small" 
+              type="primary" 
+              @click="viewNodeDetail(scope.row)"
+            >
+              详情
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
       
       <div class="pagination">
@@ -83,6 +94,60 @@
         />
       </div>
     </el-card>
+    
+    <!-- 节点详情对话框 -->
+    <el-dialog 
+      v-model="detailDialogVisible" 
+      title="节点详情" 
+      width="60%" 
+      :before-close="closeDetailDialog"
+    >
+      <div v-if="selectedNode" class="node-detail-content">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="节点名称">{{ selectedNode.name }}</el-descriptions-item>
+          <el-descriptions-item label="所属链路">{{ selectedNode.link.name }}</el-descriptions-item>
+          <el-descriptions-item label="健康状态">
+            <el-tag 
+              :type="getHealthStatusType(selectedNode.healthy_status)"
+              :effect="selectedNode.healthy_status === 'red' ? 'dark' : 'light'"
+            >
+              {{ getHealthStatusText(selectedNode.healthy_status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="最近一次状态收集时间">
+            {{ selectedNode.last_check_time || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="状态收集耗时">
+            <span v-if="selectedNode.check_duration_ms !== null">{{ selectedNode.check_duration_ms.toFixed(2) }} ms</span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ selectedNode.create_time }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ selectedNode.update_time }}</el-descriptions-item>
+          <el-descriptions-item label="主机信息" :span="2">
+            <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="host-info">
+              <span v-if="info.host">主机: {{ info.host }}</span>
+              <span v-if="info.port" class="port-info">端口: {{ info.port }}</span>
+              <el-tag 
+                v-if="typeof info.is_healthy !== 'undefined'"
+                :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
+                size="small"
+                style="width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; display: flex; align-items: center; justify-content: center;"
+              >
+                <span v-if="info.is_healthy === true" style="font-size: 12px;">✓</span>
+                <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
+                <span v-else style="font-size: 12px;">?</span>
+              </el-tag>
+            </div>
+            <span v-if="!selectedNode.basic_info_list || selectedNode.basic_info_list.length === 0">-</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeDetailDialog">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -94,10 +159,13 @@ import { useRouter } from 'vue-router'
 
 // 定义响应式数据
 const loading = ref(false)
+const detailDialogVisible = ref(false)
 const router = useRouter()
 
 // 表格数据
 const nodes = ref<any[]>([])
+// 选中的节点
+const selectedNode = ref<any>(null)
 
 // 分页信息
 const pagination = reactive({
@@ -173,6 +241,18 @@ const getHealthStatusType = (status: string) => {
     'unknown': 'info'
   }
   return typeMap[status] || 'info'
+}
+
+// 查看节点详情
+const viewNodeDetail = (row: any) => {
+  selectedNode.value = row
+  detailDialogVisible.value = true
+}
+
+// 关闭详情对话框
+const closeDetailDialog = () => {
+  detailDialogVisible.value = false
+  selectedNode.value = null
 }
 
 // 页面挂载时获取数据

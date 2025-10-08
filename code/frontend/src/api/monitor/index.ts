@@ -34,6 +34,9 @@ const monitorApiMap = {
   
   // 监控仪表板相关API
   getDashboardStats: '/monitor/dashboard/',
+  
+  // 系统健康统计相关API
+  getSystemHealthStats: '/monitor/system_health_stats/',
 }
 
 // 链路相关API
@@ -115,4 +118,10 @@ export const alertApi = {
 export const dashboardApi = {
   // 获取仪表板统计信息
   getDashboardStats: (params?: any) => http.request('get', monitorApiMap.getDashboardStats, { params })
+}
+
+// 系统健康统计相关API
+export const systemHealthStatsApi = {
+  // 获取系统健康统计信息
+  getSystemHealthStats: (params?: any) => http.request('get', monitorApiMap.getSystemHealthStats, { params })
 }

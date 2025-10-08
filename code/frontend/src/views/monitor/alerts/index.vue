@@ -7,6 +7,21 @@
         </div>
       </template>
 
+      <div class="health-stats-content">
+        <div class="stat-item">
+          <span class="stat-label">最近检查时间</span>
+          <span class="stat-value">{{ lastCheckTime || '-' }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">总耗时</span>
+          <span class="stat-value">{{ totalCheckDuration || '-' }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">检查节点数</span>
+          <span class="stat-value">{{ totalNodesChecked || '-' }}</span>
+        </div>
+      </div>
+
       <div class="filter-bar">
         <el-form :model="filterForm" inline>
           <el-form-item label="告警标题">
@@ -233,13 +248,18 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { alertApi } from '@/api/monitor'
+import { alertApi, systemHealthStatsApi } from '@/api/monitor'
 import { useRouter } from 'vue-router'
 
 // 定义响应式数据
 const loading = ref(false)
 const detailDialogVisible = ref(false)
 const silenceDialogVisible = ref(false)
+
+// 健康统计信息
+const lastCheckTime = ref<string | null>(null)
+const totalCheckDuration = ref<string | null>(null)
+const totalNodesChecked = ref<number | null>(null)
 
 // 表格数据
 const alerts = ref<any[]>([])
@@ -503,10 +523,34 @@ const closeSilenceDialog = () => {
   }
 }
 
+// 获取健康统计信息
+const fetchHealthStats = async () => {
+  try {
+    const response = await systemHealthStatsApi.getSystemHealthStats()
+    const data = response.data
+    
+    if (data.last_node_check) {
+      lastCheckTime.value = data.last_node_check.value
+    }
+    // 计算总耗时：取所有节点检查耗时的总和
+    if (data.node_check_durations && data.node_check_durations.length > 0) {
+      const totalDuration = data.node_check_durations
+        .filter((stat: any) => stat.value) // 过滤掉空值
+        .reduce((sum: number, stat: any) => sum + parseFloat(stat.value || 0), 0)
+      totalCheckDuration.value = totalDuration.toFixed(2) + ' ms'
+    }
+    totalNodesChecked.value = data.total_nodes_checked
+  } catch (error) {
+    console.error('获取健康统计信息失败:', error)
+    // 不显示错误消息，因为这个信息不是关键的
+  }
+}
+
 // 页面挂载时获取数据
 onMounted(async () => {
   await fetchAlertTypes()  // 先获取告警类型
   fetchAlerts()  // 再获取告警列表
+  fetchHealthStats()  // 获取健康统计信息
 })
 </script>
 
@@ -546,5 +590,44 @@ onMounted(async () => {
   padding: 10px;
   border-radius: 4px;
   margin: 0;
+}
+
+.health-stats-card {
+  height: fit-content;
+}
+
+.health-stats-content {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 15px;
+  background-color: #f8f9fa; /* 淡灰色背景 */
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #ebeef5;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 120px;
+  padding: 0 10px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+  word-break: break-all;
 }
 </style>

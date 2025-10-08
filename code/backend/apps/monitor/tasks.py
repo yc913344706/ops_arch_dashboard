@@ -1,17 +1,38 @@
 from celery import shared_task
 from django.utils import timezone
-from .models import Node, NodeHealth, Alert
+
+from lib.time_tools import utc_obj_to_time_zone_str
+from .models import Node, NodeHealth, Alert, SystemHealthStats
 from .probes.factory import get_probe_instance
 from lib.log import color_logger
 from .alert_config_parser import alert_config_parser, AlertRule
 import operator
 from datetime import timedelta
 
+def _record_node_health_check_duration(node_uuid, start_time, check_duration=None):
+    if check_duration is None:
+        # Calculate the total check duration for this node
+        check_duration = (timezone.now() - start_time).total_seconds() * 1000  # Convert to milliseconds
+        
+    # 添加节点检查耗时到节点属性
+    # 由于Node模型可能没有duration字段，我们使用AppSetting来存储
+    SystemHealthStats.objects.update_or_create(
+        key=f'node_check_duration_{node_uuid}',
+        defaults={
+            'value': str(check_duration),
+            'meta_info': {
+                'node_id': node_uuid, 
+                'check_time': utc_obj_to_time_zone_str(start_time), 
+                'duration_ms': check_duration}
+        }
+    )
+
 @shared_task
 def check_node_health(node_uuid):
     """
     检查单个节点健康状态
     """
+    start_time = timezone.now()
     try:
         color_logger.info(f"Start checking node health: {node_uuid}")
         node = Node.objects.get(uuid=node_uuid, is_active=True)
@@ -32,6 +53,7 @@ def check_node_health(node_uuid):
                 error_message='No basic info to check'
             )
             
+            _record_node_health_check_duration(node_uuid, start_time)
             color_logger.info(f"Node {node.name} health check completed: unknown (no basic info)")
             return
 
@@ -106,8 +128,12 @@ def check_node_health(node_uuid):
             healthy_status=healthy_status,
             response_time=avg_response_time,
             probe_result={'details': updated_basic_info_list},
-            error_message=None if healthy_status == 'green' else 'One or more checks failed'
+            error_message=None if healthy_status == 'green' else 'One or more checks failed',
+            # 添加检查耗时到 probe_result
+            create_time=timezone.now()  # 确保记录正确的创建时间
         )
+
+        _record_node_health_check_duration(node_uuid, start_time)
         
         # 使用配置驱动的方式处理告警，而不是硬编码逻辑
         # 通过定期任务 check_all_alerts 来处理告警
@@ -117,9 +143,11 @@ def check_node_health(node_uuid):
         color_logger.info(f"Finish checking node health: {node_uuid}")
         
     except Node.DoesNotExist:
+        _record_node_health_check_duration(node_uuid, start_time, -1)
         color_logger.warning(f"Node with uuid {node_uuid} does not exist or is inactive")
         color_logger.info(f"Warn checking node health: {node_uuid}")
     except Exception as e:
+        _record_node_health_check_duration(node_uuid, start_time, -2)
         color_logger.error(f"Error checking node health {node_uuid}: {str(e)}")
         color_logger.info(f"Error checking node health: {node_uuid}")
 
@@ -130,7 +158,10 @@ def check_all_nodes():
     """
     from django.conf import settings
     
+    start_time = timezone.now()
+    
     active_nodes = Node.objects.filter(is_active=True)
+    node_count = active_nodes.count()
     
     # 限制并发任务数以防止资源耗尽
     max_concurrent_checks = getattr(settings, 'MAX_CONCURRENT_HEALTH_CHECKS', 10)  # 默认为10
@@ -140,6 +171,19 @@ def check_all_nodes():
         # 每处理 max_concurrent_checks 个任务后延迟1秒
         countdown = (index // max_concurrent_checks) * 1  # 每10个任务延迟1秒
         check_node_health.apply_async(args=[str(node.uuid)], countdown=countdown)
+    
+    # 记录检查完成时间到一个全局位置，比如系统配置表或缓存中
+    # 这里我们创建一个简单的模型来存储状态信息
+    SystemHealthStats.objects.update_or_create(
+        key='last_node_check',
+        defaults={
+            'value': utc_obj_to_time_zone_str(start_time),
+            'meta_info': {
+                'node_count': node_count, 
+                'start_time': utc_obj_to_time_zone_str(start_time)
+            }
+        }
+    )
 
 @shared_task
 def cleanup_health_records():

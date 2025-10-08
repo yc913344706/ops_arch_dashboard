@@ -23,4 +23,7 @@ urlpatterns = [
     
     # 监控仪表板统计接口
     path('dashboard/', views.MonitorDashboardView.as_view(), name='monitor-dashboard'),
+    
+    # 系统健康统计接口
+    path('system_health_stats/', views.SystemHealthStatsView.as_view(), name='system-health-stats'),
 ]

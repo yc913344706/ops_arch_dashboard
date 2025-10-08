@@ -247,3 +247,18 @@ class AppSetting(BaseModel):
 
     def __str__(self):
         return self.key
+
+
+class SystemHealthStats(BaseModel):
+    """
+    系统健康统计信息
+    用于存储全局健康检查统计数据
+    """
+    key = models.CharField(max_length=100, unique=True, help_text="统计项唯一键")
+    value = models.TextField(help_text="统计值")
+    meta_info = models.JSONField(null=True, blank=True, help_text="附加信息")
+
+    class Meta:
+        db_table = 'system_health_stats'
+        verbose_name = '系统健康统计'
+        verbose_name_plural = verbose_name

@@ -3,7 +3,7 @@ from apps.monitor.tasks import check_node_health
 from lib.time_tools import utc_obj_to_time_zone_str
 from lib.request_tool import pub_bool_check, pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
-from .models import Link, Node, NodeHealth, NodeConnection, Alert
+from .models import Link, Node, NodeHealth, NodeConnection, Alert, SystemHealthStats
 from lib.log import color_logger
 from apps.myAuth.token_utils import TokenManager
 from django.db.models import Q, Count, Case, When, IntegerField, Sum, F
@@ -259,6 +259,12 @@ class NodeView(View):
             # 格式化返回数据
             result_data = []
             for node in result:
+                # 获取此节点的检查耗时统计
+                from .models import SystemHealthStats
+                duration_stat = SystemHealthStats.objects.filter(
+                    key=f'node_check_duration_{node.uuid}'
+                ).first()
+                
                 result_data.append({
                     'uuid': str(node.uuid),
                     'name': node.name,
@@ -273,6 +279,8 @@ class NodeView(View):
                     'position_y': node.position_y,
                     'create_time': utc_obj_to_time_zone_str(node.create_time),
                     'update_time': utc_obj_to_time_zone_str(node.update_time),
+                    'last_check_time': utc_obj_to_time_zone_str(node.last_check_time) if node.last_check_time else None,
+                    'check_duration_ms': float(duration_stat.value) if duration_stat else None,
                 })
             
             return pub_success_response({
@@ -529,6 +537,12 @@ class NodeHealthView(View):
             node = Node.objects.get(uuid=node_uuid)
             latest_health = node.health_records.first()  # 获取最新健康记录
 
+            # 获取此节点的检查耗时统计
+            from .models import SystemHealthStats
+            duration_stat = SystemHealthStats.objects.filter(
+                key=f'node_check_duration_{node_uuid}'
+            ).first()
+
             if latest_health:
                 data = {
                     'uuid': str(node.uuid),
@@ -537,7 +551,9 @@ class NodeHealthView(View):
                     'response_time': latest_health.response_time,
                     'last_check_time': latest_health.create_time.isoformat() if latest_health.create_time else None,
                     'probe_result': latest_health.probe_result,
-                    'error_message': latest_health.error_message
+                    'error_message': latest_health.error_message,
+                    'check_duration_ms': float(duration_stat.value) if duration_stat else None,
+                    'check_duration_info': duration_stat.meta_info if duration_stat else None
                 }
             else:
                 # 如果没有健康记录，使用节点的当前状态
@@ -548,7 +564,9 @@ class NodeHealthView(View):
                     'response_time': None,
                     'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
                     'probe_result': {},
-                    'error_message': None
+                    'error_message': None,
+                    'check_duration_ms': float(duration_stat.value) if duration_stat else None,
+                    'check_duration_info': duration_stat.meta_info if duration_stat else None
                 }
 
             return pub_success_response(data)
@@ -892,6 +910,87 @@ class AlertTypesView(View):
         except Exception as e:
             color_logger.error(f"获取告警类型失败: {e.args}")
             return pub_error_response(f"获取告警类型失败: {e.args}")
+
+
+class SystemHealthStatsView(View):
+    """系统健康统计信息接口"""
+    
+    def get(self, request):
+        """获取系统健康统计信息"""
+        try:
+            body = pub_get_request_body(request)
+            
+            # 获取指定键的统计信息，或者获取所有统计信息
+            key = body.get('key')
+            
+            if key:
+                # 获取特定键的统计信息
+                try:
+                    stat = SystemHealthStats.objects.get(key=key)
+                    return pub_success_response({
+                        'key': stat.key,
+                        'value': stat.value,
+                        'meta_info': stat.meta_info,
+                        'create_time': utc_obj_to_time_zone_str(stat.create_time),
+                        'update_time': utc_obj_to_time_zone_str(stat.update_time)
+                    })
+                except SystemHealthStats.DoesNotExist:
+                    return pub_error_response(f"统计信息不存在: {key}")
+            else:
+                # 获取所有统计信息（按需获取特定类型的统计）
+                stats = SystemHealthStats.objects.all()
+                
+                # 过滤出节点检查相关的统计
+                last_check_stats = stats.filter(key='last_node_check').first()
+                all_node_durations = stats.filter(key__startswith='node_check_duration_')
+                
+                result = {
+                    'last_node_check': None,
+                    'node_check_durations': [],
+                    'total_nodes_checked': 0,
+                    'total_check_duration': 0,  # 总耗时（毫秒）
+                    'last_check_time': None
+                }
+                
+                if last_check_stats:
+                    result['last_node_check'] = {
+                        'value': last_check_stats.value,
+                        'meta_info': last_check_stats.meta_info,
+                        'create_time': utc_obj_to_time_zone_str(last_check_stats.create_time),
+                        'update_time': utc_obj_to_time_zone_str(last_check_stats.update_time)
+                    }
+                    # 从meta_info中获取时间
+                    if last_check_stats.meta_info and 'start_time' in last_check_stats.meta_info:
+                        result['last_check_time'] = last_check_stats.meta_info['start_time']
+                
+                # 计算所有节点检查的总耗时
+                total_duration = 0
+                for stat in all_node_durations:
+                    try:
+                        if stat.value:
+                            total_duration += float(stat.value)
+                    except ValueError:
+                        pass  # 如果值不能转换为数字，跳过
+                
+                result['total_check_duration'] = total_duration
+                result['node_check_durations'] = [
+                    {
+                        'key': stat.key,
+                        'value': stat.value,
+                        'meta_info': stat.meta_info,
+                        'create_time': utc_obj_to_time_zone_str(stat.create_time),
+                        'update_time': utc_obj_to_time_zone_str(stat.update_time)
+                    }
+                    for stat in all_node_durations
+                ]
+                
+                result['total_nodes_checked'] = len(all_node_durations)
+                
+                return pub_success_response(result)
+                
+        except Exception as e:
+            color_logger.error(f"获取系统健康统计信息失败: {e.args}")
+            return pub_error_response(f"获取系统健康统计信息失败: {e.args}")
 
 
 class MonitorDashboardView(View):
