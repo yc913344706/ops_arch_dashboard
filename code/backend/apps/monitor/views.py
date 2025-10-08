@@ -967,6 +967,7 @@ class MonitorDashboardView(View):
         else:
             # 根据周期参数确定时间范围
             if period == 'day':
+                # 对于日周期，从24小时前开始到当前时间
                 start_date = timezone.localtime(now) - timedelta(days=1)
             elif period == 'week':
                 start_date = timezone.localtime(now) - timedelta(weeks=1)
@@ -985,12 +986,25 @@ class MonitorDashboardView(View):
         # 确定间隔以生成适当数量的数据点
         time_points = []
         if period == 'day':
-            # 按小时统计
-            current_time = start_date
-            while current_time <= end_date:
-                time_points.append(current_time)
-                current_time += timedelta(hours=1)
-        elif period in ['week', 'month']:
+            # 按小时统计，生成从24小时前到当前时间的整点时间点
+            # 例如：如果现在是10月8日10:52，则时间点为昨天10月7日11:00 到 今天10月8日10:00
+            # 计算开始整点（24小时前的整点）和结束整点（当前时间的整点）
+            start_hour_point = start_date.replace(minute=0, second=0, microsecond=0)
+            end_hour_point = end_date.replace(minute=0, second=0, microsecond=0)
+            
+            current_hour = start_hour_point
+            while current_hour <= end_hour_point:
+                time_points.append(current_hour)
+                current_hour += timedelta(hours=1)
+        elif period == 'week':
+            # 按天统计
+            current_date = start_date.date()
+            end_date_date = end_date.date()
+            while current_date <= end_date_date:
+                time_point = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+                time_points.append(time_point.date())  # 保持原格式
+                current_date += timedelta(days=1)
+        elif period == 'month':
             # 按天统计
             current_date = start_date.date()
             end_date_date = end_date.date()
@@ -998,8 +1012,10 @@ class MonitorDashboardView(View):
                 time_points.append(current_date)
                 current_date += timedelta(days=1)
         elif period == 'quarter':
-            # 按周统计
+            # 按周统计 - 从周一作为一周的开始
             current_date = start_date.date()
+            # 将开始日期调整为当周的周一
+            current_date = current_date - timedelta(days=current_date.weekday())
             end_date_date = end_date.date()
             while current_date <= end_date_date:
                 time_points.append(current_date)
@@ -1010,58 +1026,73 @@ class MonitorDashboardView(View):
             end_date_date = end_date.date()
             while current_date <= end_date_date:
                 time_points.append(current_date)
-                # 移动到下个月
+                # 移动到下个月 - 确保日期有效
                 if current_date.month == 12:
                     current_date = current_date.replace(year=current_date.year + 1, month=1)
                 else:
-                    if current_date.month == 1:
-                        current_date = current_date.replace(month=2)
-                    elif current_date.month == 2:
-                        # 处理2月的天数变化
-                        if current_date.day > 28:
-                            current_date = current_date.replace(day=28)
-                        current_date = current_date.replace(month=3)
-                    elif current_date.month == 3:
-                        current_date = current_date.replace(month=4)
-                    elif current_date.month == 4:
-                        current_date = current_date.replace(month=5)
-                    elif current_date.month == 5:
-                        current_date = current_date.replace(month=6)
-                    elif current_date.month == 6:
-                        current_date = current_date.replace(month=7)
-                    elif current_date.month == 7:
-                        current_date = current_date.replace(month=8)
-                    elif current_date.month == 8:
-                        current_date = current_date.replace(month=9)
-                    elif current_date.month == 9:
-                        current_date = current_date.replace(month=10)
-                    elif current_date.month == 10:
-                        current_date = current_date.replace(month=11)
-                    elif current_date.month == 11:
-                        current_date = current_date.replace(month=12)
+                    # 尝试简单递增月份
+                    try:
+                        current_date = current_date.replace(month=current_date.month + 1)
+                    except ValueError:
+                        # 处理像1月31日 -> 2月31日这样的无效日期
+                        # 移动到下个月的最后一天
+                        if current_date.month == 1:  # 跳过2月到3月
+                            current_date = current_date.replace(day=28, month=2)
+                        else:  # 其他月份
+                            next_month = current_date.month + 1
+                            if next_month in [4, 6, 9, 11]:  # 30天的月份
+                                current_date = current_date.replace(day=30, month=next_month)
+                            else:  # 31天的月份
+                                current_date = current_date.replace(day=31, month=next_month)
         
         # 获取健康数据
         trend_data = []
-        for time_point in time_points:
+        for i, time_point in enumerate(time_points):
             if period == 'day':
-                # 按小时统计
-                start_time = timezone.make_aware(datetime.combine(time_point.date(), time_point.time()))
-                end_time = start_time + timedelta(hours=1)
-            elif period in ['week', 'month']:
+                # 按小时统计，时间段从当前整点开始，到下一个整点或实际结束时间
+                start_time = time_point
+                next_hour = time_point + timedelta(hours=1)
+                
+                # 如果下一整点超过实际的结束时间，使用实际结束时间
+                if next_hour > end_date:
+                    end_time = end_date
+                else:
+                    end_time = next_hour
+            elif period == 'week':
+                # 按天统计
+                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
+                end_time = start_time + timedelta(days=1)
+            elif period == 'month':
                 # 按天统计
                 start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
                 end_time = start_time + timedelta(days=1)
             elif period == 'quarter':
-                # 按周统计
+                # 按周统计 - 从当前日期到下一周的同一天
                 start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
                 end_time = start_time + timedelta(weeks=1)
             else:  # year, 按月统计
-                if time_point.month == 12:
-                    next_month = time_point.replace(year=time_point.year + 1, month=1)
-                else:
-                    next_month = time_point.replace(month=time_point.month + 1)
+                # 对于月份，需要正确处理月份跨越
                 start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
-                end_time = timezone.make_aware(datetime.combine(next_month, datetime.min.time()))
+                
+                # 计算下一个月的对应日期
+                if time_point.month == 12:
+                    next_month_date = time_point.replace(year=time_point.year + 1, month=1)
+                else:
+                    try:
+                        next_month_date = time_point.replace(month=time_point.month + 1)
+                    except ValueError:  # 处理如1月31日到2月31日无效日期
+                        # 将日期调整为下个月的最后一天
+                        if time_point.month == 1:  # 跳到2月
+                            if (time_point.year % 4 == 0 and time_point.year % 100 != 0) or time_point.year % 400 == 0:
+                                next_month_date = time_point.replace(day=29, month=2)
+                            else:
+                                next_month_date = time_point.replace(day=28, month=2)
+                        elif time_point.month in [3, 5, 8, 10]:  # 30天的月份 (原为4,6,9,11，但3/5/8/10月只有30天)
+                            next_month_date = time_point.replace(day=30, month=time_point.month + 1)
+                        else:  # 31天的月份，且该月份只有30天
+                            next_month_date = time_point.replace(day=30, month=time_point.month + 1)
+                
+                end_time = timezone.make_aware(datetime.combine(next_month_date, datetime.min.time()))
             
             # 获取时间段内的所有健康记录
             records_in_period = NodeHealth.objects.filter(
