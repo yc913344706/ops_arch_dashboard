@@ -208,23 +208,25 @@ class Command(BaseCommand):
                         "/api/v1/monitor/nodes/": ["GET", "POST", "PUT", "DELETE"],
                         "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"],
                         "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
-                        "/api/v1/monitor/alert/": ["GET"],
+                        "/api/v1/monitor/alert/": ["GET", "PUT"],
                         "/api/v1/monitor/alert-types/": ["GET"],
-                        "/api/v1/monitor/dashboard/": ["GET"]
+                        "/api/v1/monitor/dashboard/": ["GET"],
+                        "/api/v1/monitor/system_health_stats/": ["GET"]
                         }
                     },
                     "frontend": {
                         "routes": [
-                            "monitor.dashboard",
-                            "monitor.links",
-                            "monitor.architecture",
-                            "monitor.alerts"
+                        "monitor.dashboard",
+                        "monitor.links",
+                        "monitor.architecture",
+                        "monitor.nodes",
+                        "monitor.alerts"
                         ],
                         "resources": [
-                            "monitor:createDiagram"
+                        "monitor:createDiagram"
                         ]
                     }
-                    }
+                }
             )
         ]:
             perm_obj = Permission.objects.filter(code=perm[0]).first()
