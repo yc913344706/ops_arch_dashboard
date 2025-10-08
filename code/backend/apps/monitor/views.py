@@ -350,7 +350,13 @@ class NodeView(View):
             for key, value in update_dict.items():
                 setattr(node, key, value)
             node.save()
-            check_node_health(node.uuid)
+            
+            # 尝试触发健康检查任务，但即使失败也不影响API响应
+            try:
+                check_node_health.delay(node.uuid)
+            except Exception as e:
+                color_logger.error(f"触发节点健康检查任务失败: {e.args}", exc_info=True)
+                # 不中断主流程，只是记录错误
 
             return pub_success_response({
                 'uuid': str(node.uuid),
@@ -359,7 +365,7 @@ class NodeView(View):
                 'is_active': node.is_active
             })
         except Exception as e:
-            color_logger.error(f"更新节点失败: {e.args}")
+            color_logger.error(f"更新节点失败: {e.args}", exc_info=True)
             return pub_error_response(f"更新节点失败: {e.args}")
     
     def delete(self, request):

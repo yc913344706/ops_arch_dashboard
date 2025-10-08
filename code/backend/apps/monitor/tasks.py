@@ -2,6 +2,8 @@ from celery import shared_task
 from django.utils import timezone
 
 from lib.time_tools import utc_obj_to_time_zone_str
+from lib.redis_tool import get_redis_value, set_redis_value, delete_redis_value
+from django_redis import get_redis_connection
 from .models import Node, NodeHealth, Alert, SystemHealthStats
 from .probes.factory import get_probe_instance
 from lib.log import color_logger
@@ -10,6 +12,7 @@ import operator
 from datetime import timedelta
 
 def _record_node_health_check_duration(node_uuid, start_time, check_duration=None):
+    node_uuid = str(node_uuid)
     if check_duration is None:
         # Calculate the total check duration for this node
         check_duration = (timezone.now() - start_time).total_seconds() * 1000  # Convert to milliseconds
@@ -28,11 +31,13 @@ def _record_node_health_check_duration(node_uuid, start_time, check_duration=Non
     )
 
 @shared_task
-def check_node_health(node_uuid):
+def check_node_health(node_uuid, parent_task_lock_key=None):
     """
     检查单个节点健康状态
     """
     start_time = timezone.now()
+    success = False  # 标记是否成功完成
+    
     try:
         color_logger.info(f"Start checking node health: {node_uuid}")
         node = Node.objects.get(uuid=node_uuid, is_active=True)
@@ -55,6 +60,7 @@ def check_node_health(node_uuid):
             
             _record_node_health_check_duration(node_uuid, start_time)
             color_logger.info(f"Node {node.name} health check completed: unknown (no basic info)")
+            success = True
             return
 
         # 遍历节点的所有基础信息，执行探活，并更新 basic_info_list 中的 is_healthy 状态
@@ -141,6 +147,7 @@ def check_node_health(node_uuid):
         
         color_logger.info(f"Node {node.name} health check completed: {healthy_status}")
         color_logger.info(f"Finish checking node health: {node_uuid}")
+        success = True
         
     except Node.DoesNotExist:
         _record_node_health_check_duration(node_uuid, start_time, -1)
@@ -150,6 +157,45 @@ def check_node_health(node_uuid):
         _record_node_health_check_duration(node_uuid, start_time, -2)
         color_logger.error(f"Error checking node health {node_uuid}: {str(e)}")
         color_logger.info(f"Error checking node health: {node_uuid}")
+    finally:
+        # 检查是否需要释放父任务的锁，无论成功与否都要从待处理集合中移除
+        # 这样即使任务失败，也不会导致主锁永远无法释放
+        if parent_task_lock_key:
+            _check_and_release_parent_lock(parent_task_lock_key, node_uuid, success)
+
+def _check_and_release_parent_lock(parent_task_lock_key, node_uuid, success=True):
+    """
+    检查父任务是否完成，如果完成则释放锁
+    使用 Redis 集合来管理待处理的节点，每个节点完成时从集合中移除自己
+    """
+    try:
+        # 获取Redis实例
+        redis_conn = get_redis_connection("default")
+        
+        # 获取待处理节点集合的键名
+        pending_nodes_key = f"{parent_task_lock_key}_pending_nodes"
+        
+        # 从待处理集合中移除当前完成的节点
+        redis_conn.srem(pending_nodes_key, node_uuid)
+        
+        # 检查是否还有待处理的节点
+        remaining_count = redis_conn.scard(pending_nodes_key)
+        
+        if remaining_count == 0:
+            # 所有节点都已完成，删除主锁和待处理集合
+            redis_conn.delete(parent_task_lock_key)
+            redis_conn.delete(pending_nodes_key)
+            color_logger.info(f"All node health checks completed, lock {parent_task_lock_key} released")
+        else:
+            status_msg = "successfully" if success else "with failure"
+            color_logger.debug(f"Node {node_uuid} completed {status_msg}, {remaining_count} nodes remaining")
+            
+        # 如果需要排错，可以查看还有哪些节点未完成
+        if remaining_count > 0 and remaining_count < 10:  # 只在节点数不多时显示，避免日志过多
+            remaining_nodes = redis_conn.smembers(pending_nodes_key)
+            color_logger.info(f"Remaining nodes to check: {remaining_nodes}")
+    except Exception as e:
+        color_logger.error(f"Error checking and releasing parent lock: {str(e)}")
 
 @shared_task
 def check_all_nodes():
@@ -158,32 +204,90 @@ def check_all_nodes():
     """
     from django.conf import settings
     
+    # 使用 Redis 锁来防止重复运行
+    redis_key = 'ops_arch_dashboard_check_all_nodes_lock'
+    
+    # 尝试获取锁，如果锁已存在则直接返回
+    existing_lock = get_redis_value('default', redis_key)
+    if existing_lock:
+        color_logger.info("check_all_nodes task is already running, skipping this execution")
+        return "Task already running, skipped"
+    
     start_time = timezone.now()
     
-    active_nodes = Node.objects.filter(is_active=True)
-    node_count = active_nodes.count()
+    active_nodes = list(Node.objects.filter(is_active=True))
+    node_count = len(active_nodes)
     
-    # 限制并发任务数以防止资源耗尽
-    max_concurrent_checks = getattr(settings, 'MAX_CONCURRENT_HEALTH_CHECKS', 10)  # 默认为10
+    if node_count == 0:
+        color_logger.info("No active nodes to check, skipping task")
+        return "No active nodes to check"
     
-    for index, node in enumerate(active_nodes):
-        # 在分派任务之间添加小延迟，防止系统过载
-        # 每处理 max_concurrent_checks 个任务后延迟1秒
-        countdown = (index // max_concurrent_checks) * 1  # 每10个任务延迟1秒
-        check_node_health.apply_async(args=[str(node.uuid)], countdown=countdown)
-    
-    # 记录检查完成时间到一个全局位置，比如系统配置表或缓存中
-    # 这里我们创建一个简单的模型来存储状态信息
-    SystemHealthStats.objects.update_or_create(
-        key='last_node_check',
-        defaults={
-            'value': utc_obj_to_time_zone_str(start_time),
-            'meta_info': {
-                'node_count': node_count, 
-                'start_time': utc_obj_to_time_zone_str(start_time)
+    try:
+        # 设置锁，包含节点数量和开始时间
+        lock_data = f"{node_count}:{start_time.isoformat()}"
+        # 动态设置过期时间：基础30分钟 + 每个节点估算1分钟，最多2小时
+        estimated_duration = min(7200, 1800 + node_count * 60)  # 30分钟基础 + 每个节点1分钟，上限2小时
+        set_redis_value('default', redis_key, lock_data, set_expire=estimated_duration)
+        
+        # 使用 Redis 集合来管理待处理的节点 UUID
+        redis_conn = get_redis_connection("default")
+        
+        pending_nodes_key = f"{redis_key}_pending_nodes"
+        # 先删除可能存在的旧集合
+        redis_conn.delete(pending_nodes_key)
+        
+        # 将所有待处理节点的 UUID 添加到集合中
+        if active_nodes:
+            node_uuids = [str(node.uuid) for node in active_nodes]
+            redis_conn.sadd(pending_nodes_key, *node_uuids)
+            # 设置过期时间，与锁相同的过期时间
+            redis_conn.expire(pending_nodes_key, estimated_duration)
+        
+        # 限制并发任务数以防止资源耗尽
+        max_concurrent_checks = getattr(settings, 'MAX_CONCURRENT_HEALTH_CHECKS', 10)  # 默认为10
+        
+        scheduled_count = 0
+        for index, node in enumerate(active_nodes):
+            # 在分派任务之间添加小延迟，防止系统过载
+            # 每处理 max_concurrent_checks 个任务后延迟1秒
+            countdown = (index // max_concurrent_checks) * 1  # 每10个任务延迟1秒
+            check_node_health.apply_async(
+                args=[str(node.uuid)], 
+                countdown=countdown,
+                # 传递锁键名到子任务，以便在子任务完成时检查是否需要释放锁
+                kwargs={'parent_task_lock_key': redis_key}
+            )
+            scheduled_count += 1
+        
+        # 记录检查开始时间到一个全局位置，比如系统配置表或缓存中
+        SystemHealthStats.objects.update_or_create(
+            key='last_node_check',
+            defaults={
+                'value': utc_obj_to_time_zone_str(start_time),
+                'meta_info': {
+                    'node_count': node_count, 
+                    'start_time': utc_obj_to_time_zone_str(start_time),
+                    'scheduled_count': scheduled_count,
+                    'estimated_duration': estimated_duration
+                }
             }
-        }
-    )
+        )
+        
+        color_logger.info(f"Started checking {node_count} nodes health, scheduled {scheduled_count} subtasks with lock {redis_key} and pending nodes set {pending_nodes_key}, estimated duration: {estimated_duration}s")
+        
+        return f"Scheduled {scheduled_count} node health checks"
+    
+    except Exception as e:
+        # 如果出错，清理 Redis 键，确保不会永久锁定
+        try:
+            redis_conn = get_redis_connection("default")
+            redis_conn.delete(redis_key)
+            pending_nodes_key = f"{redis_key}_pending_nodes"
+            redis_conn.delete(pending_nodes_key)
+            color_logger.error(f"Error in check_all_nodes, cleaned up locks: {str(e)}")
+        except:
+            pass  # 如果清理也失败，就不处理了
+        raise  # 重新抛出异常，让 Celery 处理
 
 @shared_task
 def cleanup_health_records():
