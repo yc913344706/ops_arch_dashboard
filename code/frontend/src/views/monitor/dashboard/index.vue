@@ -292,7 +292,6 @@ const initHealthChart = () => {
       {
         name: '健康',
         type: 'line',
-        stack: '总量',
         data: greenData,
         smooth: true,
         itemStyle: {
@@ -302,7 +301,6 @@ const initHealthChart = () => {
       {
         name: '部分异常',
         type: 'line',
-        stack: '总量',
         data: yellowData,
         smooth: true,
         itemStyle: {
@@ -312,7 +310,6 @@ const initHealthChart = () => {
       {
         name: '严重异常',
         type: 'line',
-        stack: '总量',
         data: redData,
         smooth: true,
         itemStyle: {
@@ -322,7 +319,6 @@ const initHealthChart = () => {
       {
         name: '未知',
         type: 'line',
-        stack: '总量',
         data: unknownData,
         smooth: true,
         itemStyle: {
@@ -341,6 +337,8 @@ const initHealthChart = () => {
 // 更新健康状态图表
 const updateHealthChart = (trendData) => {
   if (!healthChartInstance) return
+  
+  console.log('Updating chart with trend data:', trendData) // 调试日志
   
   // 提取日期和各种健康状态数据
   const dates = trendData.map(item => {
@@ -363,59 +361,91 @@ const updateHealthChart = (trendData) => {
   const redData = trendData.map(item => item.red_count)
   const unknownData = trendData.map(item => item.unknown_count)
   
+  console.log('Chart data:', { dates, greenData, yellowData, redData, unknownData }) // 调试日志
+  
   const option = {
     tooltip: {
-      trigger: 'axis'
+      trigger: 'axis',
+      formatter: function(params) {
+        const date = params[0].axisValue;
+        let tooltip = date + '<br/>';
+        params.forEach(param => {
+          tooltip += param.marker + ' ' + param.seriesName + ': ' + param.value + '<br/>';
+        });
+        // 添加总计
+        const total = greenData[params[0].dataIndex] + 
+                     yellowData[params[0].dataIndex] + 
+                     redData[params[0].dataIndex] + 
+                     unknownData[params[0].dataIndex];
+        tooltip += `<strong>总计: ${total}</strong>`;
+        return tooltip;
+      }
     },
     legend: {
       data: ['健康', '部分异常', '严重异常', '未知']
     },
     xAxis: {
       type: 'category',
-      data: dates
+      data: dates,
+      axisLabel: {
+        interval: 0, // 显示所有标签
+        rotate: 45, // 旋转标签避免重叠
+        fontSize: 10 // 设置较小的字体以适应更多标签
+      }
     },
     yAxis: {
-      type: 'value'
+      type: 'value',
+      name: '节点数量',
+      nameLocation: 'middle',
+      nameGap: 40
     },
     series: [
       {
         name: '健康',
         type: 'line',
-        stack: '总量',
         data: greenData,
         smooth: true,
         itemStyle: {
           color: '#52c41a' // 绿色
+        },
+        lineStyle: {
+          width: 2
         }
       },
       {
         name: '部分异常',
         type: 'line',
-        stack: '总量',
         data: yellowData,
         smooth: true,
         itemStyle: {
           color: '#faad14' // 黄色
+        },
+        lineStyle: {
+          width: 2
         }
       },
       {
         name: '严重异常',
         type: 'line',
-        stack: '总量',
         data: redData,
         smooth: true,
         itemStyle: {
           color: '#ff4d4f' // 红色
+        },
+        lineStyle: {
+          width: 2
         }
       },
       {
         name: '未知',
         type: 'line',
-        stack: '总量',
         data: unknownData,
         smooth: true,
         itemStyle: {
           color: '#ccc' // 灰色
+        },
+        lineStyle: {
+          width: 2
         }
       }
     ]

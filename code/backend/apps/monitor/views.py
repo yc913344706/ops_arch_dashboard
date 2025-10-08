@@ -1063,44 +1063,44 @@ class MonitorDashboardView(View):
                 start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
                 end_time = timezone.make_aware(datetime.combine(next_month, datetime.min.time()))
             
-            # 对于趋势图，我们需要统计在时间段内状态变为特定值的节点数量
-            # 而不是时间段内的最新状态
-            # 比如：在一周内，有60个节点曾经变成red状态，即使它们后来恢复了，这个时间段的red值仍应为60
-            
             # 获取时间段内的所有健康记录
             records_in_period = NodeHealth.objects.filter(
                 create_time__gte=start_time,
                 create_time__lt=end_time
             )
             
-            # 统计各状态的节点数（去重节点ID）
-            green_nodes = set()
-            yellow_nodes = set()
-            red_nodes = set()
-            unknown_nodes = set()
+            # 按节点ID分组，找出每个节点在时间段内的最高优先级状态
+            node_highest_status = {}
+            status_priority = {'red': 3, 'yellow': 2, 'unknown': 1, 'green': 0}
             
             for record in records_in_period:
                 node_id = record.node_id
-                if record.healthy_status == 'green':
-                    green_nodes.add(node_id)
-                elif record.healthy_status == 'yellow':
-                    yellow_nodes.add(node_id)
-                elif record.healthy_status == 'red':
-                    red_nodes.add(node_id)
-                elif record.healthy_status == 'unknown':
-                    unknown_nodes.add(node_id)
+                current_status = record.healthy_status
+                
+                # 如果节点还没有记录，或者当前状态优先级更高，则更新
+                if node_id not in node_highest_status or \
+                   status_priority[current_status] > status_priority[node_highest_status[node_id]]:
+                    node_highest_status[node_id] = current_status
             
-            green_count = len(green_nodes)
-            yellow_count = len(yellow_nodes)
-            red_count = len(red_nodes)
-            unknown_count = len(unknown_nodes)
-
+            # 统计没有健康记录的活跃节点，使用节点的当前状态
+            all_node_ids_in_records = set(node_highest_status.keys())
+            nodes_without_records = Node.objects.filter(
+                is_active=True
+            ).exclude(uuid__in=all_node_ids_in_records)
+            
+            for node in nodes_without_records:
+                node_highest_status[node.uuid] = node.healthy_status
+            
+            # 按状态统计数量
+            from collections import Counter
+            status_counts = Counter(node_highest_status.values())
+            
             trend_data.append({
                 'date': time_point.isoformat() if isinstance(time_point, datetime) else str(time_point),
-                'green_count': green_count,
-                'yellow_count': yellow_count,
-                'red_count': red_count,
-                'unknown_count': unknown_count
+                'green_count': status_counts['green'],
+                'yellow_count': status_counts['yellow'],
+                'red_count': status_counts['red'],
+                'unknown_count': status_counts['unknown']
             })
         
         return {
