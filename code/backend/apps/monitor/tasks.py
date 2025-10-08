@@ -114,11 +114,14 @@ def check_node_health(node_uuid):
         # 这样可以更灵活地管理告警规则
         
         color_logger.info(f"Node {node.name} health check completed: {healthy_status}")
+        color_logger.info(f"Finish checking node health: {node_uuid}")
         
     except Node.DoesNotExist:
         color_logger.warning(f"Node with uuid {node_uuid} does not exist or is inactive")
+        color_logger.info(f"Warn checking node health: {node_uuid}")
     except Exception as e:
         color_logger.error(f"Error checking node health {node_uuid}: {str(e)}")
+        color_logger.info(f"Error checking node health: {node_uuid}")
 
 @shared_task
 def check_all_nodes():
