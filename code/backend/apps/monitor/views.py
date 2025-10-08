@@ -1110,7 +1110,14 @@ class MonitorDashboardView(View):
     
     def get_recent_alerts(self):
         """获取最近告警"""
-        recent_alerts = Alert.objects.filter().order_by('-last_occurred')[:10]
+        # 按状态和时间排序
+        # 状态优先级：OPEN > SILENCED > CLOSED
+        # 时间：新到老
+        recent_alerts = Alert.objects.extra(
+            select={
+                'status_order': "CASE WHEN status='OPEN' THEN 3 WHEN status='SILENCED' THEN 2 WHEN status='CLOSED' THEN 1 ELSE 0 END"
+            }
+        ).order_by('-status_order', '-last_occurred')[:10]
         
         result = []
         for alert in recent_alerts:

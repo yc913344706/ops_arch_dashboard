@@ -662,4 +662,21 @@ onUnmounted(() => {
   font-size: 14px;
   color: #333;
 }
+
+/* 告警等级颜色 */
+.alert-item.alert-high {
+  border-left: 4px solid #ff4d4f; /* 红色 - 严重 */
+}
+
+.alert-item.alert-medium {
+  border-left: 4px solid #faad14; /* 黄色 - 中等 */
+}
+
+.alert-item.alert-low {
+  border-left: 4px solid #1890ff; /* 蓝色 - 低 */
+}
+
+.alert-item.alert-info {
+  border-left: 4px solid #909399; /* 灰色 - 信息 */
+}
 </style>
