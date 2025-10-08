@@ -51,10 +51,10 @@ app.conf.update(
             'task': 'apps.demo.tasks.say_hello',
             'schedule': timedelta(seconds=30),
         },
-        # 每5分钟检查所有节点健康状态
+        # 每1分钟检查所有节点健康状态
         'check-all-nodes-health': {
             'task': 'apps.monitor.tasks.check_all_nodes',
-            'schedule': timedelta(minutes=5),
+            'schedule': timedelta(minutes=1),
         },
         # 每天凌晨2点清理过期的健康记录
         'cleanup-health-records': {

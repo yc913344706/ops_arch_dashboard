@@ -537,7 +537,9 @@ const fetchHealthStats = async () => {
       const totalDuration = data.node_check_durations
         .filter((stat: any) => stat.value) // 过滤掉空值
         .reduce((sum: number, stat: any) => sum + parseFloat(stat.value || 0), 0)
-      totalCheckDuration.value = totalDuration.toFixed(2) + ' ms'
+      // totalCheckDuration.value = totalDuration.toFixed(2) + ' ms'
+      totalCheckDuration.value = totalDuration.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ms'
+
     }
     totalNodesChecked.value = data.total_nodes_checked
   } catch (error) {

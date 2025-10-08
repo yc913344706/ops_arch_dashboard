@@ -338,7 +338,7 @@ const initHealthChart = () => {
 const updateHealthChart = (trendData) => {
   if (!healthChartInstance) return
   
-  console.log('Updating chart with trend data:', trendData) // 调试日志
+  // console.log('Updating chart with trend data:', trendData) // 调试日志
   
   // 提取日期和各种健康状态数据
   const dates = trendData.map(item => {
@@ -361,7 +361,7 @@ const updateHealthChart = (trendData) => {
   const redData = trendData.map(item => item.red_count)
   const unknownData = trendData.map(item => item.unknown_count)
   
-  console.log('Chart data:', { dates, greenData, yellowData, redData, unknownData }) // 调试日志
+  // console.log('Chart data:', { dates, greenData, yellowData, redData, unknownData }) // 调试日志
   
   const option = {
     tooltip: {

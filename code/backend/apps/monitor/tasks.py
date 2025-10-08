@@ -523,7 +523,7 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
                 if rule.aggregation == 'avg' and node_health_records.exists():
                     values = [record.response_time for record in node_health_records if record.response_time is not None]
                     if values:
-                        aggregated_value = sum(values) / len(values)
+                        aggregated_value = round(sum(values) / len(values), 2)
                     else:
                         aggregated_value = None
                 elif rule.aggregation == 'max' and node_health_records.exists():
