@@ -969,28 +969,34 @@ class SystemHealthStatsView(View):
                     if last_check_stats.meta_info and 'start_time' in last_check_stats.meta_info:
                         result['last_check_time'] = last_check_stats.meta_info['start_time']
                 
-                # 计算所有节点检查的总耗时
-                total_duration = 0
-                for stat in all_node_durations:
-                    try:
-                        if stat.value:
-                            total_duration += float(stat.value)
-                    except ValueError:
-                        pass  # 如果值不能转换为数字，跳过
-                
-                result['total_check_duration'] = total_duration
-                result['node_check_durations'] = [
-                    {
-                        'key': stat.key,
-                        'value': stat.value,
-                        'meta_info': stat.meta_info,
-                        'create_time': utc_obj_to_time_zone_str(stat.create_time),
-                        'update_time': utc_obj_to_time_zone_str(stat.update_time)
-                    }
-                    for stat in all_node_durations
-                ]
-                
-                result['total_nodes_checked'] = len(all_node_durations)
+                # 计算所有节点检查的总耗时：取所有节点检查耗时的最大值，近似并行执行的总耗时
+                if all_node_durations.exists():
+                    max_duration = 0
+                    node_durations = []
+                    
+                    for stat in all_node_durations:
+                        try:
+                            if stat.value:
+                                duration = float(stat.value)
+                                node_durations.append({
+                                    'key': stat.key,
+                                    'value': stat.value,
+                                    'meta_info': stat.meta_info,
+                                    'create_time': utc_obj_to_time_zone_str(stat.create_time),
+                                    'update_time': utc_obj_to_time_zone_str(stat.update_time)
+                                })
+                                max_duration = max(max_duration, duration)
+                        except ValueError:
+                            pass  # 如果值不能转换为数字，跳过
+                    
+                    result['node_check_durations'] = node_durations
+                    result['total_nodes_checked'] = len(node_durations)
+                    
+                    # 使用最大耗时作为并行执行的近似总耗时
+                    result['total_check_duration'] = max_duration
+                else:
+                    result['total_nodes_checked'] = 0
+                    result['total_check_duration'] = 0
                 
                 return pub_success_response(result)
                 

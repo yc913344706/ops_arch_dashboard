@@ -13,7 +13,7 @@
           <span class="stat-value">{{ lastCheckTime || '-' }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">总耗时</span>
+          <span class="stat-label">单节点最长检查耗时</span>
           <span class="stat-value">{{ totalCheckDuration || '-' }}</span>
         </div>
         <div class="stat-item">
@@ -532,14 +532,9 @@ const fetchHealthStats = async () => {
     if (data.last_node_check) {
       lastCheckTime.value = data.last_node_check.value
     }
-    // 计算总耗时：取所有节点检查耗时的总和
-    if (data.node_check_durations && data.node_check_durations.length > 0) {
-      const totalDuration = data.node_check_durations
-        .filter((stat: any) => stat.value) // 过滤掉空值
-        .reduce((sum: number, stat: any) => sum + parseFloat(stat.value || 0), 0)
-      // totalCheckDuration.value = totalDuration.toFixed(2) + ' ms'
-      totalCheckDuration.value = totalDuration.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ms'
-
+    // 显示并行执行的实际耗时（毫秒）
+    if (data.total_check_duration !== undefined) {
+      totalCheckDuration.value = data.total_check_duration.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ms'
     }
     totalNodesChecked.value = data.total_nodes_checked
   } catch (error) {

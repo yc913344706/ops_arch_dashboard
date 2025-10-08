@@ -259,7 +259,7 @@ def check_all_nodes():
             )
             scheduled_count += 1
         
-        # 记录检查开始时间到一个全局位置，比如系统配置表或缓存中
+        # 记录检查开始时间到一个全局位置
         SystemHealthStats.objects.update_or_create(
             key='last_node_check',
             defaults={
