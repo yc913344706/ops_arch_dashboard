@@ -374,7 +374,7 @@ const getSeverityType = (severity: string) => {
   switch (severity) {
     case 'CRITICAL': return 'danger'
     case 'HIGH': return 'warning'
-    case 'MEDIUM': return 'orange'
+    case 'MEDIUM': return 'warning'  // Element Plus不支持'orange'，使用'warning'
     case 'LOW': return 'info'
     default: return 'info'
   }
