@@ -491,6 +491,9 @@ def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
             alert.resolved_at = timezone.now()
             alert.save()
             color_logger.info(f"Closed alert {alert.title} for node {node.name}")
+            
+            # 触发告警关闭通知
+            trigger_alert_notification(alert)
 
         # 处理静默的告警，如果问题已解决，也要将静默的告警关闭
         silenced_filters = {
@@ -510,6 +513,9 @@ def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
             alert.silenced_until = timezone.now()  # 既然问题解决了，静默也应结束
             alert.save()
             color_logger.info(f"Closed silenced alert {alert.title} for node {node.name} as the issue is resolved")
+            
+            # 触发告警关闭通知
+            trigger_alert_notification(alert)
             
     except Exception as e:
         color_logger.error(f"Error closing resolved alerts for node {node.name}: {str(e)}")

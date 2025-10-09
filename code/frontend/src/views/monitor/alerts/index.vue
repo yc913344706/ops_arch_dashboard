@@ -10,36 +10,48 @@
       <div class="health-stats-content">
         <div class="stat-item">
           <span class="stat-label">最近检查时间</span>
-          <span class="stat-value">{{ lastCheckTime || '-' }}</span>
+          <span class="stat-value">{{ lastCheckTime || "-" }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">单节点最长检查耗时</span>
-          <span class="stat-value">{{ totalCheckDuration || '-' }}</span>
+          <span class="stat-value">{{ totalCheckDuration || "-" }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">检查节点数</span>
-          <span class="stat-value">{{ totalNodesChecked || '-' }}</span>
+          <span class="stat-value">{{ totalNodesChecked || "-" }}</span>
         </div>
       </div>
 
       <div class="filter-bar">
         <el-form :model="filterForm" inline>
           <el-form-item label="告警标题">
-            <el-input 
-              v-model="filterForm.title" 
-              placeholder="输入告警标题" 
+            <el-input
+              v-model="filterForm.title"
+              placeholder="输入告警标题"
               clearable
-              @keyup.enter="fetchAlerts" />
+              @keyup.enter="fetchAlerts"
+            />
           </el-form-item>
           <el-form-item label="状态">
-            <el-select v-model="filterForm.status" placeholder="选择状态" clearable style="width: 120px;">
+            <el-select
+              v-model="filterForm.status"
+              placeholder="选择状态"
+              clearable
+              style="width: 120px"
+            >
               <el-option label="开启" value="OPEN" />
               <el-option label="已关闭" value="CLOSED" />
               <el-option label="已静默" value="SILENCED" />
             </el-select>
           </el-form-item>
           <el-form-item label="类型">
-            <el-select v-model="filterForm.alert_type" placeholder="选择类型" clearable style="width: 150px;" :loading="loadingAlertTypes">
+            <el-select
+              v-model="filterForm.alert_type"
+              placeholder="选择类型"
+              clearable
+              style="width: 150px"
+              :loading="loadingAlertTypes"
+            >
               <el-option
                 v-for="item in alertTypes"
                 :key="item.value"
@@ -49,7 +61,12 @@
             </el-select>
           </el-form-item>
           <el-form-item label="严重程度">
-            <el-select v-model="filterForm.severity" placeholder="选择严重程度" clearable style="width: 120px;">
+            <el-select
+              v-model="filterForm.severity"
+              placeholder="选择严重程度"
+              clearable
+              style="width: 120px"
+            >
               <el-option label="低" value="LOW" />
               <el-option label="中" value="MEDIUM" />
               <el-option label="高" value="HIGH" />
@@ -63,17 +80,30 @@
         </el-form>
       </div>
 
-      <el-table 
-        :data="alerts" 
+      <el-table
+        :data="alerts"
         v-loading="loading"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="title" label="标题" width="200" show-overflow-tooltip />
-        <el-table-column prop="node_name" label="节点" width="150" show-overflow-tooltip />
+        <el-table-column
+          prop="title"
+          label="标题"
+          width="200"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="node_name"
+          label="节点"
+          width="150"
+          show-overflow-tooltip
+        />
         <el-table-column prop="alert_type" label="类型" width="150">
           <template #default="scope">
-            <el-tag size="small" :type="getAlertTypeTagType(scope.row.alert_type)">
+            <el-tag
+              size="small"
+              :type="getAlertTypeTagType(scope.row.alert_type)"
+            >
               {{ getAlertTypeLabel(scope.row.alert_type) }}
             </el-tag>
           </template>
@@ -96,25 +126,25 @@
         <el-table-column prop="last_occurred" label="最后发生" width="160" />
         <el-table-column label="操作" width="250">
           <template #default="scope">
-            <el-button 
-              size="small" 
+            <el-button
+              size="small"
               type="warning"
               @click="silenceAlert(scope.row)"
               :disabled="scope.row.status !== 'OPEN'"
             >
               静默
             </el-button>
-            <el-button 
-              size="small" 
-              type="primary" 
+            <el-button
+              size="small"
+              type="primary"
               @click="closeAlert(scope.row)"
               :disabled="scope.row.status !== 'OPEN'"
             >
               关闭
             </el-button>
-            <el-button 
-              size="small" 
-              type="info" 
+            <el-button
+              size="small"
+              type="info"
               @click="viewAlertDetail(scope.row)"
             >
               详情
@@ -137,22 +167,28 @@
     </el-card>
 
     <!-- 告警详情对话框 -->
-    <el-dialog 
-      v-model="detailDialogVisible" 
-      title="告警详情" 
-      width="60%" 
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="告警详情"
+      width="60%"
       :before-close="closeDetailDialog"
     >
       <div v-if="selectedAlert" class="alert-detail-content">
         <el-descriptions :column="1" border>
-          <el-descriptions-item label="标题">{{ selectedAlert.title }}</el-descriptions-item>
-          <el-descriptions-item label="节点ID">{{ selectedAlert.node_id }}</el-descriptions-item>
+          <el-descriptions-item label="标题">{{
+            selectedAlert.title
+          }}</el-descriptions-item>
+          <el-descriptions-item label="节点ID">{{
+            selectedAlert.node_id
+          }}</el-descriptions-item>
           <el-descriptions-item label="类型">
             <el-tag :type="getAlertTypeTagType(selectedAlert.alert_type)">
               {{ getAlertTypeLabel(selectedAlert.alert_type) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="子类型">{{ selectedAlert.alert_subtype || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="子类型">{{
+            selectedAlert.alert_subtype || "-"
+          }}</el-descriptions-item>
           <el-descriptions-item label="严重程度">
             <el-tag :type="getSeverityType(selectedAlert.severity)">
               {{ getSeverityLabel(selectedAlert.severity) }}
@@ -163,17 +199,37 @@
               {{ getStatusLabel(selectedAlert.status) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="首次发生">{{ selectedAlert.first_occurred }}</el-descriptions-item>
-          <el-descriptions-item label="最后发生">{{ selectedAlert.last_occurred }}</el-descriptions-item>
-          <el-descriptions-item label="解决时间">{{ selectedAlert.resolved_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="静默时间">{{ selectedAlert.silenced_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="静默结束时间">{{ selectedAlert.silenced_until || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="静默原因">{{ selectedAlert.silenced_reason || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="首次发生">{{
+            selectedAlert.first_occurred
+          }}</el-descriptions-item>
+          <el-descriptions-item label="最后发生">{{
+            selectedAlert.last_occurred
+          }}</el-descriptions-item>
+          <el-descriptions-item label="解决时间">{{
+            selectedAlert.resolved_at || "-"
+          }}</el-descriptions-item>
+          <el-descriptions-item label="静默时间">{{
+            selectedAlert.silenced_at || "-"
+          }}</el-descriptions-item>
+          <el-descriptions-item label="静默结束时间">{{
+            selectedAlert.silenced_until || "-"
+          }}</el-descriptions-item>
+          <el-descriptions-item label="静默原因">{{
+            selectedAlert.silenced_reason || "-"
+          }}</el-descriptions-item>
           <el-descriptions-item label="创建者">
-            {{ selectedAlert.created_by?.nickname || selectedAlert.created_by?.username || '-' }}
+            {{
+              selectedAlert.created_by?.nickname ||
+              selectedAlert.created_by?.username ||
+              "-"
+            }}
           </el-descriptions-item>
           <el-descriptions-item label="静默者">
-            {{ selectedAlert.silenced_by?.nickname || selectedAlert.silenced_by?.username || '-' }}
+            {{
+              selectedAlert.silenced_by?.nickname ||
+              selectedAlert.silenced_by?.username ||
+              "-"
+            }}
           </el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">
             <pre class="alert-description">{{ selectedAlert.description }}</pre>
@@ -188,15 +244,19 @@
     </el-dialog>
 
     <!-- 静默告警对话框 -->
-    <el-dialog 
-      v-model="silenceDialogVisible" 
-      title="静默告警" 
-      width="500px" 
+    <el-dialog
+      v-model="silenceDialogVisible"
+      title="静默告警"
+      width="500px"
       :before-close="closeSilenceDialog"
     >
       <el-form :model="silenceForm" label-width="100px" ref="silenceFormRef">
         <el-form-item label="静默时长" required>
-          <el-select v-model="silenceForm.duration" placeholder="选择静默时长" style="width: 100%;">
+          <el-select
+            v-model="silenceForm.duration"
+            placeholder="选择静默时长"
+            style="width: 100%"
+          >
             <el-option label="15分钟" :value="900" />
             <el-option label="30分钟" :value="1800" />
             <el-option label="1小时" :value="3600" />
@@ -207,28 +267,38 @@
             <el-option label="自定义" value="custom" />
           </el-select>
         </el-form-item>
-        <el-form-item 
-          v-if="silenceForm.duration === 'custom'" 
-          label="自定义时长(秒)" 
+        <el-form-item
+          v-if="silenceForm.duration === 'custom'"
+          label="自定义时长(秒)"
           prop="customDuration"
-          :rules="[{ required: true, message: '请输入静默时长', trigger: 'blur' }, { type: 'number', min: 1, message: '时长必须大于0', trigger: 'blur' }]"
+          :rules="[
+            { required: true, message: '请输入静默时长', trigger: 'blur' },
+            {
+              type: 'number',
+              min: 1,
+              message: '时长必须大于0',
+              trigger: 'blur'
+            }
+          ]"
         >
-          <el-input-number 
-            v-model="silenceForm.customDuration" 
-            :min="1" 
+          <el-input-number
+            v-model="silenceForm.customDuration"
+            :min="1"
             placeholder="请输入静默时长(秒)"
-            style="width: 100%;"
+            style="width: 100%"
           />
         </el-form-item>
-        <el-form-item 
-          label="静默原因" 
+        <el-form-item
+          label="静默原因"
           prop="reason"
-          :rules="[{ required: true, message: '请输入静默原因', trigger: 'blur' }]"
+          :rules="[
+            { required: true, message: '请输入静默原因', trigger: 'blur' }
+          ]"
         >
-          <el-input 
-            v-model="silenceForm.reason" 
-            type="textarea" 
-            placeholder="请输入静默原因" 
+          <el-input
+            v-model="silenceForm.reason"
+            type="textarea"
+            placeholder="请输入静默原因"
             :rows="3"
             maxlength="200"
             show-word-limit
@@ -246,80 +316,80 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { alertApi, systemHealthStatsApi } from '@/api/monitor'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { alertApi, systemHealthStatsApi } from "@/api/monitor";
+import { useRouter } from "vue-router";
 
 // 定义响应式数据
-const loading = ref(false)
-const detailDialogVisible = ref(false)
-const silenceDialogVisible = ref(false)
+const loading = ref(false);
+const detailDialogVisible = ref(false);
+const silenceDialogVisible = ref(false);
 
 // 健康统计信息
-const lastCheckTime = ref<string | null>(null)
-const totalCheckDuration = ref<string | null>(null)
-const totalNodesChecked = ref<number | null>(null)
+const lastCheckTime = ref<string | null>(null);
+const totalCheckDuration = ref<string | null>(null);
+const totalNodesChecked = ref<number | null>(null);
 
 // 表格数据
-const alerts = ref<any[]>([])
+const alerts = ref<any[]>([]);
 
 // 分页信息
 const pagination = reactive({
   currentPage: 1,
   pageSize: 10,
   total: 0
-})
+});
 
 // 告警类型相关
-const alertTypes = ref<any[]>([])
-const loadingAlertTypes = ref(false)
+const alertTypes = ref<any[]>([]);
+const loadingAlertTypes = ref(false);
 
 // 筛选表单
 const filterForm = reactive({
-  title: '',
-  status: '',
-  severity: '',
-  node_id: '',
-  alert_type: ''
-})
+  title: "",
+  status: "",
+  severity: "",
+  node_id: "",
+  alert_type: ""
+});
 
 // 选中的告警
-const selectedAlert = ref<any>(null)
+const selectedAlert = ref<any>(null);
 
 // 选中的行
-const multipleSelection = ref<any[]>([])
+const multipleSelection = ref<any[]>([]);
 
 // 静默表单
 const silenceForm = reactive({
   duration: 3600, // 默认1小时
   customDuration: null,
-  reason: ''
-})
+  reason: ""
+});
 
 // 静默表单引用
-const silenceFormRef = ref()
+const silenceFormRef = ref();
 
 // 获取告警类型列表
 const fetchAlertTypes = async () => {
-  loadingAlertTypes.value = true
+  loadingAlertTypes.value = true;
   try {
-    const response = await alertApi.getAlertTypes()
-    alertTypes.value = response.data.alert_types || []
+    const response = await alertApi.getAlertTypes();
+    alertTypes.value = response.data.alert_types || [];
   } catch (error) {
-    console.error('获取告警类型失败:', error)
+    console.error("获取告警类型失败:", error);
     // 即使获取失败也显示错误信息，而不是提供默认类型
     // 因为现在告警类型是从配置文件动态获取的
-    ElMessage.error('获取告警类型失败')
-    alertTypes.value = []  // 使用空数组
+    ElMessage.error("获取告警类型失败");
+    alertTypes.value = []; // 使用空数组
   } finally {
-    loadingAlertTypes.value = false
+    loadingAlertTypes.value = false;
   }
-}
+};
 
 // 获取告警列表
 const fetchAlerts = async () => {
-  loading.value = true
+  loading.value = true;
   try {
     const params = {
       page: pagination.currentPage,
@@ -329,119 +399,145 @@ const fetchAlerts = async () => {
       severity: filterForm.severity,
       node_id: filterForm.node_id,
       alert_type: filterForm.alert_type
-    }
-    const response = await alertApi.getAlerts(params)
-    alerts.value = response.data.data || []
-    pagination.total = response.data.all_num || 0
+    };
+    const response = await alertApi.getAlerts(params);
+    alerts.value = response.data.data || [];
+    pagination.total = response.data.all_num || 0;
   } catch (error) {
-    console.error('获取告警列表失败:', error)
-    ElMessage.error('获取告警列表失败')
+    console.error("获取告警列表失败:", error);
+    ElMessage.error("获取告警列表失败");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // 重置筛选条件
 const resetFilter = () => {
-  filterForm.title = ''
-  filterForm.status = ''
-  filterForm.severity = ''
-  filterForm.node_id = ''
-  filterForm.alert_type = ''
-  fetchAlerts()
-}
+  filterForm.title = "";
+  filterForm.status = "";
+  filterForm.severity = "";
+  filterForm.node_id = "";
+  filterForm.alert_type = "";
+  fetchAlerts();
+};
 
 // 分页大小变化
 const handleSizeChange = (size: number) => {
-  pagination.pageSize = size
-  pagination.currentPage = 1
-  fetchAlerts()
-}
+  pagination.pageSize = size;
+  pagination.currentPage = 1;
+  fetchAlerts();
+};
 
 // 当前页变化
 const handleCurrentChange = (page: number) => {
-  pagination.currentPage = page
-  fetchAlerts()
-}
+  pagination.currentPage = page;
+  fetchAlerts();
+};
 
 // 行选择变化
 const handleSelectionChange = (val: any[]) => {
-  multipleSelection.value = val
-}
+  multipleSelection.value = val;
+};
 
 // 获取严重程度标签类型
 const getSeverityType = (severity: string) => {
   switch (severity) {
-    case 'CRITICAL': return 'danger'
-    case 'HIGH': return 'warning'
-    case 'MEDIUM': return 'warning'  // Element Plus不支持'orange'，使用'warning'
-    case 'LOW': return 'info'
-    default: return 'info'
+    case "CRITICAL":
+      return "danger";
+    case "HIGH":
+      return "warning";
+    case "MEDIUM":
+      return "warning"; // Element Plus不支持'orange'，使用'warning'
+    case "LOW":
+      return "info";
+    default:
+      return "info";
   }
 }
 
 // 获取严重程度标签文本
 const getSeverityLabel = (severity: string) => {
   switch (severity) {
-    case 'CRITICAL': return '严重'
-    case 'HIGH': return '高'
-    case 'MEDIUM': return '中'
-    case 'LOW': return '低'
-    default: return severity
+    case "CRITICAL":
+      return "严重";
+    case "HIGH":
+      return "高";
+    case "MEDIUM":
+      return "中";
+    case "LOW":
+      return "低";
+    default:
+      return severity;
   }
-}
+};
 
 // 获取状态标签类型
 const getStatusType = (status: string) => {
   switch (status) {
-    case 'OPEN': return 'danger'
-    case 'CLOSED': return 'success'
-    case 'SILENCED': return 'warning'
-    default: return 'info'
+    case "OPEN":
+      return "danger";
+    case "CLOSED":
+      return "success";
+    case "SILENCED":
+      return "warning";
+    default:
+      return "info";
   }
-}
+};
 
 // 获取状态标签文本
 const getStatusLabel = (status: string) => {
   switch (status) {
-    case 'OPEN': return '开启'
-    case 'CLOSED': return '已关闭'
-    case 'SILENCED': return '已静默'
-    default: return status
+    case "OPEN":
+      return "开启";
+    case "CLOSED":
+      return "已关闭";
+    case "SILENCED":
+      return "已静默";
+    default:
+      return status;
   }
-}
+};
 
 // 获取告警类型标签类型
 const getAlertTypeTagType = (type: string) => {
   // 根据告警类型返回不同的标签颜色
   // 一般来说，严重问题用danger，一般问题用warning，其他用info
-  if (type.includes('FAILED') || type.includes('UNAVAILABLE') || type.includes('UNREACHABLE')) {
-    return 'danger'
-  } else if (type.includes('SLOW') || type.includes('TIMEOUT') || type.includes('PARTIAL')) {
-    return 'warning'
+  if (
+    type.includes("FAILED") ||
+    type.includes("UNAVAILABLE") ||
+    type.includes("UNREACHABLE")
+  ) {
+    return "danger";
+  } else if (
+    type.includes("SLOW") ||
+    type.includes("TIMEOUT") ||
+    type.includes("PARTIAL")
+  ) {
+    return "warning";
   }
-  return 'info'
-}
+  return "info";
+};
 
 // 获取告警类型标签文本
 const getAlertTypeLabel = (type: string) => {
   // 在已获取的告警类型中查找对应的标签
-  const alertType = alertTypes.value.find(item => item.value === type)
+  const alertType = alertTypes.value.find(item => item.value === type);
   if (alertType) {
-    return alertType.label
+    return alertType.label;
   }
   // 如果没有找到，返回原始值
-  return type
-}
+  return type;
+};
 
 // 静默告警
 const silenceAlert = async (row: any) => {
-  selectedAlert.value = row
-  silenceForm.duration = 3600 // 默认1小时
-  silenceForm.customDuration = null
-  silenceForm.reason = ''
-  silenceDialogVisible.value = true
-}
+  selectedAlert.value = row;
+  silenceForm.duration = 3600; // 默认1小时
+  silenceForm.customDuration = null;
+  silenceForm.reason = "";
+  silenceDialogVisible.value = true;
+};
 
 // 确认静默
 const confirmSilence = async () => {
@@ -449,106 +545,106 @@ const confirmSilence = async () => {
     silenceFormRef.value.validate(async (valid: boolean) => {
       if (valid) {
         try {
-          let duration = silenceForm.duration
-          if (duration === 'custom') {
-            duration = silenceForm.customDuration
+          let duration = silenceForm.duration;
+          if (duration === "custom") {
+            duration = silenceForm.customDuration;
           }
-          
+
           await alertApi.updateAlert({
             uuid: selectedAlert.value.uuid,
-            status: 'SILENCED',
+            status: "SILENCED",
             silence_duration: duration,
             silence_reason: silenceForm.reason
-          })
-          
-          ElMessage.success('告警静默成功')
-          fetchAlerts()
-          closeSilenceDialog()
+          });
+
+          ElMessage.success("告警静默成功");
+          fetchAlerts();
+          closeSilenceDialog();
         } catch (error) {
-          console.error('告警静默失败:', error)
-          ElMessage.error('告警静默失败')
+          console.error("告警静默失败:", error);
+          ElMessage.error("告警静默失败");
         }
       } else {
-        ElMessage.error('请填写完整的静默信息')
+        ElMessage.error("请填写完整的静默信息");
       }
-    })
+    });
   }
-}
+};
 
 // 关闭告警
 const closeAlert = async (row: any) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要关闭告警 "${row.title}" 吗？`,
-      '提示',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
+    await ElMessageBox.confirm(`确定要关闭告警 "${row.title}" 吗？`, "提示", {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning"
+    });
+
     await alertApi.updateAlert({
       uuid: row.uuid,
-      status: 'CLOSED'
-    })
-    
-    ElMessage.success('告警关闭成功')
-    fetchAlerts()
+      status: "CLOSED"
+    });
+
+    ElMessage.success("告警关闭成功");
+    fetchAlerts();
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('关闭告警失败:', error)
-      ElMessage.error('关闭告警失败')
+    if (error !== "cancel") {
+      console.error("关闭告警失败:", error);
+      ElMessage.error("关闭告警失败");
     }
   }
-}
+};
 
 // 查看告警详情
 const viewAlertDetail = (row: any) => {
-  selectedAlert.value = row
-  detailDialogVisible.value = true
-}
+  selectedAlert.value = row;
+  detailDialogVisible.value = true;
+};
 
 // 关闭详情对话框
 const closeDetailDialog = () => {
-  detailDialogVisible.value = false
-  selectedAlert.value = null
-}
+  detailDialogVisible.value = false;
+  selectedAlert.value = null;
+};
 
 // 关闭静默对话框
 const closeSilenceDialog = () => {
-  silenceDialogVisible.value = false
+  silenceDialogVisible.value = false;
   if (silenceFormRef.value) {
-    silenceFormRef.value.resetFields()
+    silenceFormRef.value.resetFields();
   }
-}
+};
 
 // 获取健康统计信息
 const fetchHealthStats = async () => {
   try {
-    const response = await systemHealthStatsApi.getSystemHealthStats()
-    const data = response.data
-    
+    const response = await systemHealthStatsApi.getSystemHealthStats();
+    const data = response.data;
+
     if (data.last_node_check) {
-      lastCheckTime.value = data.last_node_check.value
+      lastCheckTime.value = data.last_node_check.value;
     }
     // 显示并行执行的实际耗时（毫秒）
     if (data.total_check_duration !== undefined) {
-      totalCheckDuration.value = data.total_check_duration.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ms'
+      totalCheckDuration.value =
+        data.total_check_duration.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }) + " ms";
     }
-    totalNodesChecked.value = data.total_nodes_checked
+    totalNodesChecked.value = data.total_nodes_checked;
   } catch (error) {
-    console.error('获取健康统计信息失败:', error)
+    console.error("获取健康统计信息失败:", error);
     // 不显示错误消息，因为这个信息不是关键的
   }
-}
+};
 
 // 页面挂载时获取数据
 onMounted(async () => {
-  await fetchAlertTypes()  // 先获取告警类型
-  fetchAlerts()  // 再获取告警列表
-  fetchHealthStats()  // 获取健康统计信息
-})
+  await fetchAlertTypes(); // 先获取告警类型
+  fetchAlerts(); // 再获取告警列表
+  fetchHealthStats(); // 获取健康统计信息
+});
 </script>
 
 <style scoped>

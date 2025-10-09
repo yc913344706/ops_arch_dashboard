@@ -347,11 +347,14 @@ class PushPlusService:
                     "skipped": True
                 }
 
-            # 检查告警状态，只有OPEN状态的告警才发送
-            if alert.status != 'OPEN':
+            # 检查告警状态，只有OPEN、CLOSED和SILENCED状态的告警才发送
+            # OPEN: 新告警或现有告警更新
+            # CLOSED: 告警关闭（恢复通知）
+            # SILENCED: 告警静默（状态更新）
+            if alert.status not in ['OPEN', 'CLOSED', 'SILENCED']:
                 return {
                     "success": False,
-                    "error": f"告警状态不是OPEN，当前状态: {alert.status}",
+                    "error": f"告警状态不支持推送，当前状态: {alert.status}",
                     "skipped": True
                 }
 
@@ -373,26 +376,33 @@ class PushPlusService:
             if last_sent_info:
                 last_sent_time = last_sent_info.get('last_occurred')
                 last_sent_description = last_sent_info.get('description')
+                last_sent_status = last_sent_info.get('status')
                 
-                # 如果最后一次发生时间和描述与缓存中的一致，说明已经推送过相同的告警信息
-                if (alert.last_occurred and last_sent_time and 
-                    last_sent_description == alert.description and
-                    abs((alert.last_occurred - last_sent_time).total_seconds()) < 60):  # 60秒内视为相同时间
-                    color_logger.info(f"告警 {alert.uuid} 已推送过相同内容，跳过本次推送")
-                    return {
-                        "success": False,
-                        "error": "告警已推送过",
-                        "skipped": True
-                    }
+                # 如果是状态变更（如从OPEN变为CLOSED），则应该推送
+                # 如果状态未变化且其他信息也未变化，则跳过推送
+                is_status_change = (last_sent_status != alert.status)
+                
+                if not is_status_change:  # 只有在状态未变化时才检查重复
+                    # 如果最后一次发生时间和描述与缓存中的一致，说明已经推送过相同的告警信息
+                    if (alert.last_occurred and last_sent_time and 
+                        last_sent_description == alert.description and
+                        abs((alert.last_occurred - last_sent_time).total_seconds()) < 60):  # 60秒内视为相同时间
+                        color_logger.info(f"告警 {alert.uuid} 已推送过相同内容，跳过本次推送")
+                        return {
+                            "success": False,
+                            "error": "告警已推送过",
+                            "skipped": True
+                        }
 
             # 发送告警消息
             result = self.send_alert_message(alert)
             
             if result['success']:
-                # 记录推送信息，包括最后发生时间和描述
+                # 记录推送信息，包括最后发生时间、描述和状态
                 cache.set(cache_key, {
                     'last_occurred': alert.last_occurred,
-                    'description': alert.description
+                    'description': alert.description,
+                    'status': alert.status
                 }, timeout=3600)  # 缓存1小时
             
             return result
