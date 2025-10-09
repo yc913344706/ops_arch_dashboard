@@ -211,7 +211,10 @@ class Command(BaseCommand):
                         "/api/v1/monitor/alert/": ["GET", "PUT"],
                         "/api/v1/monitor/alert-types/": ["GET"],
                         "/api/v1/monitor/dashboard/": ["GET"],
-                        "/api/v1/monitor/system_health_stats/": ["GET"]
+                        "/api/v1/monitor/system_health_stats/": ["GET"],
+                        "/api/v1/monitor/pushplus-configs/": ["GET", "POST", "PUT", "DELETE"],
+                        "/api/v1/monitor/pushplus-config/": ["GET", "PUT"],
+                        "/api/v1/monitor/pushplus-test/": ["POST"]
                         }
                     },
                     "frontend": {
@@ -220,6 +223,7 @@ class Command(BaseCommand):
                         "monitor.links",
                         "monitor.architecture",
                         "monitor.nodes",
+                        "monitor.pushplus",
                         "monitor.alerts"
                         ],
                         "resources": [
