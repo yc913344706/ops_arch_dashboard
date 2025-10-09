@@ -158,20 +158,80 @@ class PushPlusService:
             node = Node.objects.filter(uuid=alert.node_id).first()
             node_name = node.name if node else alert.node_id
 
-            # 构建标题和内容
+            # 根据告警状态和消息类型决定标题和内容
             title_prefix = config.title_prefix or ""
-            title = f"{title_prefix}[{alert.severity}] {alert.title}"
-
-            # 根据配置的模板类型处理内容
-            if config.template_type == 'alert':
-                # 告警消息模板
-                content = self._format_alert_content(alert, node_name, config.content_template)
-            elif config.template_type == 'notification':
-                # 通知消息模板
-                content = self._format_notification_content(alert, node_name, config.content_template)
+            
+            # 根据消息格式选择换行符
+            line_break = "\n"  # 默认换行符
+            if config.msg_type == 'html':
+                line_break = "<br/>"
+            elif config.msg_type == 'markdown':
+                line_break = "  \n"  # Markdown 换行需要两个空格加换行
+            
+            # 如果告警状态是CLOSED，说明是恢复通知
+            if alert.status == 'CLOSED':
+                title = f"{title_prefix}[恢复通知] {alert.title} 已恢复"
+                
+                # 对于恢复通知，使用专门的格式
+                if config.template_type == 'alert':
+                    # 在告警模板基础上添加恢复说明
+                    original_content = self._format_alert_content(alert, node_name, config.content_template)
+                    if config.msg_type == 'html':
+                        content = f"<strong>【问题已恢复】</strong>{line_break}{original_content}{line_break}{line_break}<em>恢复时间:</em> {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
+                    elif config.msg_type == 'markdown':
+                        content = f"**【问题已恢复】**{line_break}{original_content}{line_break}{line_break}*恢复时间:* {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
+                    else:  # txt 或其他格式
+                        content = f"【问题已恢复】{line_break}{original_content}{line_break}{line_break}恢复时间: {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
+                elif config.template_type == 'notification':
+                    # 通知模板的恢复格式
+                    original_content = self._format_notification_content(alert, node_name, config.content_template)
+                    if config.msg_type == 'html':
+                        content = f"<strong>【系统通知 - 问题恢复】</strong>{line_break}{original_content}{line_break}{line_break}<em>问题已解决，恢复正常运行</em>"
+                    elif config.msg_type == 'markdown':
+                        content = f"**【系统通知 - 问题恢复】**{line_break}{original_content}{line_break}{line_break}*问题已解决，恢复正常运行*"
+                    else:  # txt 或其他格式
+                        content = f"【系统通知 - 问题恢复】{line_break}{original_content}{line_break}{line_break}问题已解决，恢复正常运行"
+                else:  # custom template
+                    # 自定义模板的恢复格式
+                    original_content = self._format_custom_content(alert, node_name, config.content_template)
+                    if config.msg_type == 'html':
+                        content = f"<strong>【恢复通知】{alert.title} 已恢复</strong>{line_break}{original_content}{line_break}{line_break}<em>恢复时间:</em> {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
+                    elif config.msg_type == 'markdown':
+                        content = f"**【恢复通知】{alert.title} 已恢复**{line_break}{original_content}{line_break}{line_break}*恢复时间:* {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
+                    else:  # txt 或其他格式
+                        content = f"【恢复通知】{alert.title} 已恢复{line_break}{original_content}{line_break}{line_break}恢复时间: {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
             else:
-                # 自定义消息模板
-                content = self._format_custom_content(alert, node_name, config.content_template)
+                # 非关闭状态的正常告警处理
+                title = f"{title_prefix}[{alert.severity}] {alert.title}"
+                
+                # 根据配置的模板类型处理内容
+                if config.template_type == 'alert':
+                    # 告警消息模板
+                    content = self._format_alert_content(alert, node_name, config.content_template)
+                    # 对于HTML和Markdown，应用基本格式
+                    if config.msg_type == 'html':
+                        content = content.replace('\n', '<br/>')
+                    elif config.msg_type == 'markdown':
+                        # Markdown 通常不需要特殊转换，但保留结构
+                        pass
+                elif config.template_type == 'notification':
+                    # 通知消息模板
+                    content = self._format_notification_content(alert, node_name, config.content_template)
+                    # 对于HTML和Markdown，应用基本格式
+                    if config.msg_type == 'html':
+                        content = content.replace('\n', '<br/>')
+                    elif config.msg_type == 'markdown':
+                        # Markdown 通常不需要特殊转换，但保留结构
+                        pass
+                else:
+                    # 自定义消息模板
+                    content = self._format_custom_content(alert, node_name, config.content_template)
+                    # 对于HTML和Markdown，应用基本格式
+                    if config.msg_type == 'html':
+                        content = content.replace('\n', '<br/>')
+                    elif config.msg_type == 'markdown':
+                        # Markdown 通常不需要特殊转换，但保留结构
+                        pass
 
             # 发送消息
             result = self.send_message(
@@ -224,7 +284,10 @@ class PushPlusService:
             title=alert.title,
             description=alert.description,
             first_occurred=alert.first_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.first_occurred else "",
-            last_occurred=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else ""
+            last_occurred=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
+            resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
+            silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
+            status=alert.status
         )
 
         return content
@@ -255,7 +318,10 @@ class PushPlusService:
             node_name=node_name,
             severity=alert.severity,
             title=alert.title,
-            occurred_time=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else ""
+            occurred_time=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
+            resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
+            silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
+            status=alert.status
         )
 
         return content
@@ -287,6 +353,8 @@ class PushPlusService:
             description=alert.description,
             first_occurred=alert.first_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.first_occurred else "",
             last_occurred=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
+            resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
+            silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
             status=alert.status
         )
 
@@ -347,11 +415,11 @@ class PushPlusService:
                     "skipped": True
                 }
 
-            # 检查告警状态，只有OPEN、CLOSED和SILENCED状态的告警才发送
+            # 检查告警状态，只有OPEN和CLOSED状态的告警才发送
             # OPEN: 新告警或现有告警更新
             # CLOSED: 告警关闭（恢复通知）
-            # SILENCED: 告警静默（状态更新）
-            if alert.status not in ['OPEN', 'CLOSED', 'SILENCED']:
+            # SILENCED: 告警静默（通常由用户手动触发，不推送通知以避免骚扰）
+            if alert.status not in ['OPEN', 'CLOSED']:
                 return {
                     "success": False,
                     "error": f"告警状态不支持推送，当前状态: {alert.status}",
