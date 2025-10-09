@@ -11,7 +11,8 @@
       "/api/v1/monitor/dashboard/": ["GET"],
       "/api/v1/monitor/system_health_stats/": ["GET"],
       "/api/v1/monitor/pushplus-configs/": ["GET", "POST", "PUT", "DELETE"],
-      "/api/v1/monitor/pushplus-config/": ["GET", "PUT"]
+      "/api/v1/monitor/pushplus-config/": ["GET", "PUT"],
+      "/api/v1/monitor/pushplus-test/": ["POST"]
     }
   },
   "frontend": {

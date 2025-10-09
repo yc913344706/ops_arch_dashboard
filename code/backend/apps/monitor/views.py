@@ -780,14 +780,16 @@ class AlertView(View):
                 
                 # 状态更改后触发告警通知处理
                 # 在关闭或静默告警后，可以发送状态更新通知
-                from apps.monitor.pushplus_service import PushPlusService
-                pushplus_service = PushPlusService()
-                result = pushplus_service.check_and_send_alert(alert)
-                if result['success']:
-                    color_logger.info(f"告警状态更改后推送成功: {alert.title}")
-                else:
-                    if not result.get('skipped'):
-                        color_logger.warning(f"告警状态更改后推送失败: {result.get('error', 'Unknown error')}")
+                # 只有在告警状态变为CLOSED或SILENCED时才推送状态变更
+                if new_status in ['CLOSED', 'SILENCED']:
+                    from apps.monitor.pushplus_service import PushPlusService
+                    pushplus_service = PushPlusService()
+                    result = pushplus_service.check_and_send_alert(alert)
+                    if result['success']:
+                        color_logger.info(f"告警状态更改后推送成功: {alert.title}")
+                    else:
+                        if not result.get('skipped'):
+                            color_logger.warning(f"告警状态更改后推送失败: {result.get('error', 'Unknown error')}")
 
             return pub_success_response({
                 'uuid': str(alert.uuid),
@@ -898,14 +900,16 @@ class AlertDetailView(View):
                 
                 # 状态更改后触发告警通知处理
                 # 在关闭或静默告警后，可以发送状态更新通知
-                from apps.monitor.pushplus_service import PushPlusService
-                pushplus_service = PushPlusService()
-                result = pushplus_service.check_and_send_alert(alert)
-                if result['success']:
-                    color_logger.info(f"告警状态更改后推送成功: {alert.title}")
-                else:
-                    if not result.get('skipped'):
-                        color_logger.warning(f"告警状态更改后推送失败: {result.get('error', 'Unknown error')}")
+                # 只有在告警状态变为CLOSED或SILENCED时才推送状态变更
+                if new_status in ['CLOSED', 'SILENCED']:
+                    from apps.monitor.pushplus_service import PushPlusService
+                    pushplus_service = PushPlusService()
+                    result = pushplus_service.check_and_send_alert(alert)
+                    if result['success']:
+                        color_logger.info(f"告警状态更改后推送成功: {alert.title}")
+                    else:
+                        if not result.get('skipped'):
+                            color_logger.warning(f"告警状态更改后推送失败: {result.get('error', 'Unknown error')}")
 
             return pub_success_response({
                 'uuid': str(alert.uuid),
@@ -1053,7 +1057,9 @@ class PushPlusConfigView(View):
                 )
             
             # 按启用状态过滤
-            if enabled is not None:
+            # color_logger.debug(f"enabled: {enabled}")
+            if enabled is not None and enabled != '':
+                # color_logger.debug(f"enabled is not None")
                 enabled = pub_bool_check(enabled)
                 config_list = config_list.filter(enabled=enabled)
             
@@ -1244,6 +1250,45 @@ class PushPlusConfigDetailView(View):
         except Exception as e:
             color_logger.error(f"获取PushPlus配置详情失败: {e.args}")
             return pub_error_response(f"获取PushPlus配置详情失败: {e.args}")
+    
+    def put(self, request):
+        """更新单个PushPlus配置"""
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            config = PushPlusConfig.objects.filter(uuid=uuid).first()
+            assert config, '更新的配置不存在'
+
+            update_keys = [
+                'name', 'token', 'title_prefix', 'enabled', 'msg_type', 
+                'template_type', 'content_template', 'apply_to_all_alerts',
+                'alert_severity_filter', 'topic_list', 'webhook_list', 'extra_params'
+            ]
+            update_dict = {key: value for key, value in body.items() if key in update_keys}
+            
+            # 更新关联用户
+            user_name = getattr(request, 'user_name', None)
+            if user_name:
+                from apps.user.models import User
+                user = User.objects.filter(username=user_name).first()
+                if user:
+                    update_dict['updated_by'] = user
+            
+            for key, value in update_dict.items():
+                setattr(config, key, value)
+            config.save()
+
+            return pub_success_response({
+                'uuid': str(config.uuid),
+                'name': config.name,
+                'enabled': config.enabled
+            })
+        except Exception as e:
+            color_logger.error(f"更新PushPlus配置失败: {e.args}")
+            return pub_error_response(f"更新PushPlus配置失败: {e.args}")
 
 
 class PushPlusTestView(View):

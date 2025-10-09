@@ -331,6 +331,11 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
         ).first()
         
         if existing_alert:
+            # 检查是否需要触发通知（只有在告警信息有实质性变化时才推送）
+            # 比较当前告警的严重程度与更新后的严重程度，或者是否首次发生
+            old_severity = existing_alert.severity
+            needs_notification = (old_severity != severity)
+            
             # 更新已存在告警的最后发生时间
             existing_alert.last_occurred = timezone.now()
             existing_alert.description = description
@@ -338,8 +343,9 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
             existing_alert.save()
             color_logger.info(f"Updated existing alert for node {node.name}: {title}")
             
-            # 触发告警通知
-            trigger_alert_notification(existing_alert)
+            # 只有在告警严重程度变化时才触发通知，避免每分钟重复推送
+            if needs_notification:
+                trigger_alert_notification(existing_alert)
             
             return existing_alert
         else:
@@ -355,7 +361,7 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
             )
             color_logger.info(f"Created new alert for node {node.name}: {title}")
             
-            # 触发告警通知
+            # 新创建的告警总是需要通知
             trigger_alert_notification(alert)
             
             return alert

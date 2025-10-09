@@ -363,8 +363,38 @@ class PushPlusService:
                     "skipped": True
                 }
 
+            # 检查是否需要推送（避免重复推送）
+            # 使用Django缓存来记录最近推送的告警
+            from django.core.cache import cache
+            cache_key = f"pushplus_last_sent_{alert.uuid}"
+            last_sent_info = cache.get(cache_key)
+            
+            # 如果已记录推送信息，检查是否需要再次推送
+            if last_sent_info:
+                last_sent_time = last_sent_info.get('last_occurred')
+                last_sent_description = last_sent_info.get('description')
+                
+                # 如果最后一次发生时间和描述与缓存中的一致，说明已经推送过相同的告警信息
+                if (alert.last_occurred and last_sent_time and 
+                    last_sent_description == alert.description and
+                    abs((alert.last_occurred - last_sent_time).total_seconds()) < 60):  # 60秒内视为相同时间
+                    color_logger.info(f"告警 {alert.uuid} 已推送过相同内容，跳过本次推送")
+                    return {
+                        "success": False,
+                        "error": "告警已推送过",
+                        "skipped": True
+                    }
+
             # 发送告警消息
             result = self.send_alert_message(alert)
+            
+            if result['success']:
+                # 记录推送信息，包括最后发生时间和描述
+                cache.set(cache_key, {
+                    'last_occurred': alert.last_occurred,
+                    'description': alert.description
+                }, timeout=3600)  # 缓存1小时
+            
             return result
 
         except Exception as e:
