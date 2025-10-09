@@ -3,6 +3,7 @@ from lib.model_tools import BaseModel
 from apps.user.models import User
 from apps.monitor.enum import NODE_HEALTH_STATUS_CHOICES
 from django.utils import timezone
+import json
 
 
 class Alert(BaseModel):
@@ -262,3 +263,133 @@ class SystemHealthStats(BaseModel):
         db_table = 'system_health_stats'
         verbose_name = '系统健康统计'
         verbose_name_plural = verbose_name
+
+
+class PushPlusConfig(BaseModel):
+    """
+    PushPlus配置模型 - 存储PushPlus推送配置
+    """
+    # 配置类型
+    CONFIG_TYPE_CHOICES = [
+        ('GLOBAL', '全局配置'),
+        ('DEFAULT', '默认配置'),
+    ]
+    
+    # 消息类型
+    MSG_TYPE_CHOICES = [
+        ('txt', '文本消息'),
+        ('html', 'HTML消息'),
+        ('markdown', 'Markdown消息'),
+        ('json', 'JSON消息'),
+    ]
+    
+    # 消息模板类型
+    TEMPLATE_CHOICES = [
+        ('alert', '告警消息模板'),
+        ('notification', '通知消息模板'),
+        ('custom', '自定义消息模板'),
+    ]
+    
+    config_type = models.CharField(
+        max_length=20, 
+        choices=CONFIG_TYPE_CHOICES, 
+        default='GLOBAL', 
+        help_text="配置类型"
+    )
+    name = models.CharField(max_length=100, unique=True, help_text="配置名称")
+    token = models.CharField(max_length=100, help_text="PushPlus Token")
+    title_prefix = models.CharField(max_length=100, blank=True, default="", help_text="标题前缀")
+    enabled = models.BooleanField(default=True, help_text="是否启用")
+    msg_type = models.CharField(max_length=20, choices=MSG_TYPE_CHOICES, default='txt', help_text="消息类型")
+    template_type = models.CharField(max_length=20, choices=TEMPLATE_CHOICES, default='alert', help_text="模板类型")
+    content_template = models.TextField(help_text="内容模板，支持变量替换")
+    
+    # 推送条件配置
+    apply_to_all_alerts = models.BooleanField(default=True, help_text="是否应用于所有告警")
+    alert_severity_filter = models.JSONField(
+        default=list, 
+        help_text="告警严重程度过滤器，例如['CRITICAL', 'HIGH']"
+    )
+    
+    # 消息配置
+    topic_list = models.JSONField(
+        default=list, 
+        help_text="订阅组列表，以英文逗号分隔"
+    )
+    webhook_list = models.JSONField(
+        default=list, 
+        help_text="Webhook列表"
+    )
+    
+    # 额外配置
+    extra_params = models.JSONField(
+        default=dict, 
+        help_text="额外参数，以JSON格式存储"
+    )
+    
+    # 关联信息
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='created_pushplus_configs', 
+        help_text="创建人"
+    )
+    updated_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='updated_pushplus_configs', 
+        help_text="更新人"
+    )
+
+    class Meta:
+        db_table = 'pushplus_config'
+        verbose_name = 'PushPlus配置'
+        verbose_name_plural = verbose_name
+        ordering = ['-create_time']
+
+    def __str__(self):
+        return f"PushPlus配置 - {self.name}"
+
+    @classmethod
+    def get_active_config(cls):
+        """
+        获取启用的配置
+        """
+        return cls.objects.filter(enabled=True).first()
+    
+    def get_alert_severity_filter_list(self):
+        """
+        获取告警严重程度过滤器列表
+        """
+        if isinstance(self.alert_severity_filter, list):
+            return self.alert_severity_filter
+        try:
+            return json.loads(self.alert_severity_filter)
+        except:
+            return []
+    
+    def get_topic_list(self):
+        """
+        获取订阅组列表
+        """
+        if isinstance(self.topic_list, list):
+            return self.topic_list
+        try:
+            return json.loads(self.topic_list)
+        except:
+            return []
+    
+    def get_webhook_list(self):
+        """
+        获取Webhook列表
+        """
+        if isinstance(self.webhook_list, list):
+            return self.webhook_list
+        try:
+            return json.loads(self.webhook_list)
+        except:
+            return []

@@ -21,6 +21,11 @@ urlpatterns = [
     path('alert/', views.AlertDetailView.as_view(), name='alert-detail'),
     path('alert-types/', views.AlertTypesView.as_view(), name='alert-types'),
     
+    # PushPlus配置相关接口
+    path('pushplus-configs/', views.PushPlusConfigView.as_view(), name='pushplus-config-list'),
+    path('pushplus-config/', views.PushPlusConfigDetailView.as_view(), name='pushplus-config-detail'),
+    path('pushplus-test/', views.PushPlusTestView.as_view(), name='pushplus-test'),
+    
     # 监控仪表板统计接口
     path('dashboard/', views.MonitorDashboardView.as_view(), name='monitor-dashboard'),
     

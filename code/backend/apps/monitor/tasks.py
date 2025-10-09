@@ -337,6 +337,10 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
             existing_alert.severity = severity
             existing_alert.save()
             color_logger.info(f"Updated existing alert for node {node.name}: {title}")
+            
+            # 触发告警通知
+            trigger_alert_notification(existing_alert)
+            
             return existing_alert
         else:
             # 创建新告警
@@ -350,6 +354,10 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
                 status='OPEN'
             )
             color_logger.info(f"Created new alert for node {node.name}: {title}")
+            
+            # 触发告警通知
+            trigger_alert_notification(alert)
+            
             return alert
     except Exception as e:
         color_logger.error(f"Error creating or updating alert for node {node.name}: {str(e)}", exc_info=True)
@@ -731,5 +739,35 @@ def expire_silenced_alerts():
             
     except Exception as e:
         color_logger.error(f"Error processing expired silenced alerts: {str(e)}")
+
+
+def trigger_alert_notification(alert):
+    """
+    触发告警通知，包括 PushPlus 推送
+    """
+    try:
+        # 导入 PushPlus 服务
+        from .pushplus_service import PushPlusService
+        
+        # 创建 PushPlus 服务实例并发送告警消息
+        pushplus_service = PushPlusService()
+        result = pushplus_service.check_and_send_alert(alert)
+        
+        if result['success']:
+            color_logger.info(f"PushPlus告警推送成功: {alert.title}")
+        else:
+            if result.get('skipped'):
+                color_logger.info(f"PushPlus告警推送已跳过: {result.get('error', 'Unknown reason')}")
+            else:
+                color_logger.error(f"PushPlus告警推送失败: {result.get('error', 'Unknown error')}")
+                
+        return result
+        
+    except ImportError:
+        color_logger.warning("PushPlus服务模块不可用，跳过推送")
+        return {"success": False, "error": "PushPlus服务模块不可用"}
+    except Exception as e:
+        color_logger.error(f"触发告警通知异常: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 

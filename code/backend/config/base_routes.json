@@ -47,6 +47,14 @@
           "title": "告警中心",
           "showParent": true
         }
+      },
+      "pushplus": {
+        "path": "/monitor/pushplus/index",
+        "name": "MonitorPushPlus",
+        "meta": {
+          "title": "告警配置",
+          "showParent": true
+        }
       }
     }
   },

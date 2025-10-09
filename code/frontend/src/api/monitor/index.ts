@@ -37,6 +37,14 @@ const monitorApiMap = {
   
   // 系统健康统计相关API
   getSystemHealthStats: '/monitor/system_health_stats/',
+  
+  // PushPlus配置相关API
+  getPushPlusConfigs: '/monitor/pushplus-configs/',
+  getPushPlusConfig: '/monitor/pushplus-config/',
+  createPushPlusConfig: '/monitor/pushplus-configs/',
+  updatePushPlusConfig: '/monitor/pushplus-config/',
+  deletePushPlusConfig: '/monitor/pushplus-config/',
+  testPushPlusConfig: '/monitor/pushplus-test/',
 }
 
 // 链路相关API
@@ -124,4 +132,25 @@ export const dashboardApi = {
 export const systemHealthStatsApi = {
   // 获取系统健康统计信息
   getSystemHealthStats: (params?: any) => http.request('get', monitorApiMap.getSystemHealthStats, { params })
+}
+
+// PushPlus配置相关API
+export const pushPlusConfigApi = {
+  // 获取PushPlus配置列表
+  getPushPlusConfigs: (params?: any) => http.request('get', monitorApiMap.getPushPlusConfigs, { params }),
+  
+  // 获取单个PushPlus配置详情
+  getPushPlusConfig: (params: any) => http.request('get', monitorApiMap.getPushPlusConfig, { params }),
+  
+  // 创建PushPlus配置
+  createPushPlusConfig: (data: any) => http.request('post', monitorApiMap.createPushPlusConfig, { data }),
+  
+  // 更新PushPlus配置
+  updatePushPlusConfig: (data: any) => http.request('put', monitorApiMap.updatePushPlusConfig, { data }),
+  
+  // 删除PushPlus配置
+  deletePushPlusConfig: (params: any) => http.request('delete', monitorApiMap.deletePushPlusConfig, { params }),
+  
+  // 测试PushPlus配置
+  testPushPlusConfig: (data: any) => http.request('post', monitorApiMap.testPushPlusConfig, { data })
 }
