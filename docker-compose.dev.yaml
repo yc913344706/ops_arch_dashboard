@@ -11,6 +11,7 @@ services:
       - ./code/backend:/app
       - ./data/backend:/data/persistent
       - ./logs/backend:/var/log/backend
+      - ./etc/resolv.conf:/etc/resolv.conf
     env_file:
       - ./code/backend/.dev.env
     depends_on:
