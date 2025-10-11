@@ -40,6 +40,17 @@ class PortProbe(BaseProbe):
             
             timeout = self.params.get('timeout', 3)
             
+            # 确保端口是整数类型
+            try:
+                port = int(port)
+            except ValueError:
+                return {
+                    'is_healthy': False,
+                    'response_time': 0,
+                    'error_message': f'Invalid port value: {port}',
+                    'details': {}
+                }
+            
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
             

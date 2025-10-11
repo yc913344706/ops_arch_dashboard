@@ -82,6 +82,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None):
                 # 执行Ping检测
                 probe = get_probe_instance('ping', {})
                 result = probe.check_with_host(node, host)
+                color_logger.info(f"Ping check result for {host}: {result}")
                 if not result['is_healthy']:
                     updated_info['is_healthy'] = False
                 if result.get('response_time'):
@@ -91,6 +92,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None):
             if port and host:  # 如果有端口和主机，则执行端口检测
                 probe = get_probe_instance('port', {'timeout': 3})
                 result = probe.check_with_host_port(node, host, port)
+                color_logger.info(f"Port check result for {host}:{port}: {result}")
                 if not result['is_healthy']:
                     updated_info['is_healthy'] = False
                 if result.get('response_time'):
@@ -99,6 +101,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None):
             elif port:  # 如果只有端口，使用节点的IP地址
                 probe = get_probe_instance('port', {'timeout': 3})
                 result = probe.check_with_host_port(node, node.link.name, port)  # 使用节点链接名作为主机名占位符
+                color_logger.info(f"Port check result for {node.link.name}:{port}: {result}")
                 if not result['is_healthy']:
                     updated_info['is_healthy'] = False
                 if result.get('response_time'):
