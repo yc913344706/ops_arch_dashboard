@@ -873,6 +873,22 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
         # 处理单点检测相关的规则（single_point_missing, single_point_warning）
         # 现在由 check_all_alerts 统一处理，基于健康记录中的信息进行判断
         if rule.name in ['single_point_missing', 'single_point_warning']:
+            # 检查节点的链路是否需要检测单点
+            if not node.link.check_single_point:
+                # 如果不需要检测单点，则关闭所有相关的单点检测告警
+                if rule.name == 'single_point_missing':
+                    close_resolved_alerts(
+                        node=node,
+                        alert_type='SINGLE_POINT_MISSING'
+                    )
+                elif rule.name == 'single_point_warning':
+                    close_resolved_alerts(
+                        node=node,
+                        alert_type='SINGLE_POINT_WARNING'
+                    )
+                # 处理完单点检测规则后直接返回，不继续处理通用逻辑
+                return
+
             # 获取最新的健康记录来判断单点状态
             if health_record:
                 probe_result = health_record.probe_result or {}
