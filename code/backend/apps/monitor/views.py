@@ -1527,6 +1527,8 @@ class MonitorDashboardView(View):
                 current_time = start_date.replace(minute=0, second=0, microsecond=0)
                 end_time = end_date.replace(minute=0, second=0, microsecond=0)
                 while current_time <= end_time:
+                    if timezone.is_naive(current_time):
+                        current_time = timezone.make_aware(current_time)
                     time_points.append(current_time)
                     current_time += timedelta(hours=1)
             elif period == 'week':
@@ -1534,28 +1536,32 @@ class MonitorDashboardView(View):
                 current_date = start_date.date()
                 end_date_obj = end_date.date()
                 while current_date <= end_date_obj:
-                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_time = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+                    time_points.append(current_time)
                     current_date += timedelta(days=1)
             elif period == 'month':
                 # 按天统计
                 current_date = start_date.date()
                 end_date_obj = end_date.date()
                 while current_date <= end_date_obj:
-                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_time = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+                    time_points.append(current_time)
                     current_date += timedelta(days=1)
             elif period == 'quarter':
                 # 按周统计
                 current_date = start_date.date()
                 end_date_obj = end_date.date()
                 while current_date <= end_date_obj:
-                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_time = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+                    time_points.append(current_time)
                     current_date += timedelta(weeks=1)
             else:  # year
                 # 按月统计
                 current_date = start_date.date()
                 end_date_obj = end_date.date()
                 while current_date <= end_date_obj:
-                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_time = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
+                    time_points.append(current_time)
                     if current_date.month == 12:
                         current_date = current_date.replace(year=current_date.year + 1, month=1)
                     else:
@@ -1577,9 +1583,23 @@ class MonitorDashboardView(View):
                 
                 # 遍历每个节点的数据
                 for node_id, records in health_records.items():
+                    # 确保时间范围是timezone-aware的
+                    if timezone.is_naive(period_start):
+                        period_start = timezone.make_aware(period_start)
+                    if timezone.is_naive(period_end):
+                        period_end = timezone.make_aware(period_end)
+                    
                     # 找到该时间段内该节点的记录
-                    period_records = [r for r in records 
-                                    if period_start <= r['time'].replace(tzinfo=None).replace(tzinfo=timezone.utc if r['time'].tzinfo is None else r['time'].tzinfo) < period_end.replace(tzinfo=None)]
+                    period_records = []
+                    for r in records:
+                        record_time = r['time']
+                        # 确保record_time是timezone-aware的
+                        if timezone.is_naive(record_time):
+                            record_time = timezone.make_aware(record_time)
+                            
+                        if period_start <= record_time < period_end:
+                            period_records.append(r)
+                    
                     if period_records:
                         # 以最新的记录为准
                         latest_record = max(period_records, key=lambda x: x['time'])
@@ -1603,7 +1623,11 @@ class MonitorDashboardView(View):
                 })
             
             # 如果InfluxDB没有足够的数据，使用回退逻辑
-            if not trend_data and NodeHealth.objects.exists(): # 只在MySQL中有数据且InfluxDB无数据时才回退
+            if not trend_data or all(
+                item['green_count'] == 0 and item['yellow_count'] == 0 and 
+                item['red_count'] == 0 and item['unknown_count'] == 0 
+                for item in trend_data
+            ):
                 # 使用原有的基于MySQL的逻辑作为回退
                 return self._get_health_trend_data_fallback(period, start_date, end_date)
 
