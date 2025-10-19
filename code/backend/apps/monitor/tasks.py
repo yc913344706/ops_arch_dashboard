@@ -661,49 +661,51 @@ def create_or_update_alert(node, alert_type, alert_subtype, title, description, 
             color_logger.info(f"Alert for node {node.name} is silenced until {silenced_alert.silenced_until}, skipping creation/update")
             return None
 
-        # 检查是否已存在相同告警
-        existing_alert = Alert.objects.filter(
-            node_id=str(node.uuid),
-            alert_type=alert_type,
-            alert_subtype=alert_subtype,
-            status='OPEN'
-        ).first()
-        
-        if existing_alert:
-            # 检查是否需要触发通知（只有在告警信息有实质性变化时才推送）
-            # 比较当前告警的严重程度与更新后的严重程度，或者是否首次发生
-            old_severity = existing_alert.severity
-            needs_notification = (old_severity != severity)
-            
-            # 更新已存在告警的最后发生时间
-            existing_alert.last_occurred = timezone.now()
-            existing_alert.description = description
-            existing_alert.severity = severity
-            existing_alert.save()
-            color_logger.info(f"Updated existing alert for node {node.name}: {title}")
-            
-            # 只有在告警严重程度变化时才触发通知，避免每分钟重复推送
-            if needs_notification:
-                trigger_alert_notification(existing_alert)
-            
-            return existing_alert
-        else:
-            # 创建新告警
-            alert = Alert.objects.create(
+        # 使用事务确保操作的原子性，防止并发问题
+        with transaction.atomic():
+            # 检查是否已存在相同告警
+            existing_alert = Alert.objects.select_for_update().filter(
                 node_id=str(node.uuid),
                 alert_type=alert_type,
                 alert_subtype=alert_subtype,
-                title=title,
-                description=description,
-                severity=severity,
                 status='OPEN'
-            )
-            color_logger.info(f"Created new alert for node {node.name}: {title}")
+            ).first()
             
-            # 新创建的告警总是需要通知
-            trigger_alert_notification(alert)
-            
-            return alert
+            if existing_alert:
+                # 检查是否需要触发通知（只有在告警信息有实质性变化时才推送）
+                # 比较当前告警的严重程度与更新后的严重程度，或者是否首次发生
+                old_severity = existing_alert.severity
+                needs_notification = (old_severity != severity)
+                
+                # 更新已存在告警的最后发生时间
+                existing_alert.last_occurred = timezone.now()
+                existing_alert.description = description
+                existing_alert.severity = severity
+                existing_alert.save()
+                color_logger.info(f"Updated existing alert for node {node.name}: {title}")
+                
+                # 只有在告警严重程度变化时才触发通知，避免每分钟重复推送
+                if needs_notification:
+                    trigger_alert_notification(existing_alert)
+                
+                return existing_alert
+            else:
+                # 创建新告警
+                alert = Alert.objects.create(
+                    node_id=str(node.uuid),
+                    alert_type=alert_type,
+                    alert_subtype=alert_subtype,
+                    title=title,
+                    description=description,
+                    severity=severity,
+                    status='OPEN'
+                )
+                color_logger.info(f"Created new alert for node {node.name}: {title}")
+                
+                # 新创建的告警总是需要通知
+                trigger_alert_notification(alert)
+                
+                return alert
     except Exception as e:
         color_logger.error(f"Error creating or updating alert for node {node.name}: {str(e)}", exc_info=True)
 
@@ -814,48 +816,51 @@ def close_resolved_alerts(node, alert_type=None, alert_subtype=None):
     同时处理已静默的告警，如果告警条件已经解决，应结束静默状态
     """
     try:
-        filters = {
-            'node_id': str(node.uuid),
-            'status': 'OPEN'
-        }
-        if alert_type:
-            filters['alert_type'] = alert_type
-        if alert_subtype:
-            filters['alert_subtype'] = alert_subtype
+        with transaction.atomic():
+            filters = {
+                'node_id': str(node.uuid),
+                'status': 'OPEN'
+            }
+            if alert_type:
+                filters['alert_type'] = alert_type
+            if alert_subtype:
+                filters['alert_subtype'] = alert_subtype
+                
+            # 使用 select_for_update 来防止并发问题
+            open_alerts = Alert.objects.select_for_update().filter(**filters)
             
-        open_alerts = Alert.objects.filter(**filters)
-        
-        for alert in open_alerts:
-            alert.status = 'CLOSED'
-            alert.resolved_at = timezone.now()
-            alert.save()
-            color_logger.info(f"Closed alert {alert.title} for node {node.name}")
-            
-            # 触发告警关闭通知
-            trigger_alert_notification(alert)
+            for alert in open_alerts:
+                alert.status = 'CLOSED'
+                alert.resolved_at = timezone.now()
+                alert.save()
+                color_logger.info(f"Closed alert {alert.title} for node {node.name}")
+                
+                # 触发告警关闭通知
+                trigger_alert_notification(alert)
 
-        # 处理静默的告警，如果问题已解决，也要将静默的告警关闭
-        silenced_filters = {
-            'node_id': str(node.uuid),
-            'status': 'SILENCED'
-        }
-        if alert_type:
-            silenced_filters['alert_type'] = alert_type
-        if alert_subtype:
-            silenced_filters['alert_subtype'] = alert_subtype
+            # 处理静默的告警，如果问题已解决，也要将静默的告警关闭
+            silenced_filters = {
+                'node_id': str(node.uuid),
+                'status': 'SILENCED'
+            }
+            if alert_type:
+                silenced_filters['alert_type'] = alert_type
+            if alert_subtype:
+                silenced_filters['alert_subtype'] = alert_subtype
+                
+            # 使用 select_for_update 来防止并发问题
+            silenced_alerts = Alert.objects.select_for_update().filter(**silenced_filters)
             
-        silenced_alerts = Alert.objects.filter(**silenced_filters)
-        
-        for alert in silenced_alerts:
-            alert.status = 'CLOSED'
-            alert.resolved_at = timezone.now()
-            alert.silenced_until = timezone.now()  # 既然问题解决了，静默也应结束
-            alert.save()
-            color_logger.info(f"Closed silenced alert {alert.title} for node {node.name} as the issue is resolved")
-            
-            # 触发告警关闭通知
-            trigger_alert_notification(alert)
-            
+            for alert in silenced_alerts:
+                alert.status = 'CLOSED'
+                alert.resolved_at = timezone.now()
+                alert.silenced_until = timezone.now()  # 既然问题解决了，静默也应结束
+                alert.save()
+                color_logger.info(f"Closed silenced alert {alert.title} for node {node.name} as the issue is resolved")
+                
+                # 触发告警关闭通知
+                trigger_alert_notification(alert)
+                
     except Exception as e:
         color_logger.error(f"Error closing resolved alerts for node {node.name}: {str(e)}")
 
@@ -881,7 +886,8 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
                         basic_info_count=0
                     )
                     
-                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    # 统一使用规则名称作为subtype，确保一致性
+                    alert_subtype = 'NoBasicInfo'
                     
                     create_or_update_alert(
                         node=node,
@@ -898,7 +904,8 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
                         single_point_count=single_point_count
                     )
                     
-                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    # 统一使用规则名称作为subtype，确保一致性
+                    alert_subtype = 'SinglePoint'
                     
                     create_or_update_alert(
                         node=node,
@@ -933,7 +940,8 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
                         basic_info_count=0
                     )
                     
-                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    # 统一使用规则名称作为subtype，确保一致性
+                    alert_subtype = 'NoBasicInfo'
                     
                     create_or_update_alert(
                         node=node,
