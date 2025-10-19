@@ -959,6 +959,22 @@ class SystemHealthStatsView(View):
             # 获取指定键的统计信息，或者获取所有统计信息
             key = body.get('key')
             
+            # 检查是否请求特定任务信息
+            task_uuid = body.get('task_uuid')
+            
+            if task_uuid:
+                # 获取特定任务的详细信息
+                from .tasks import get_check_all_nodes_task_info
+                task_info = get_check_all_nodes_task_info(task_uuid)
+                
+                if task_info:
+                    return pub_success_response({
+                        'task_uuid': task_uuid,
+                        'task_info': task_info
+                    })
+                else:
+                    return pub_error_response(f"任务不存在或已过期: {task_uuid}")
+            
             if key:
                 # 获取特定键的统计信息
                 try:
@@ -973,6 +989,18 @@ class SystemHealthStatsView(View):
                 except SystemHealthStats.DoesNotExist:
                     return pub_error_response(f"统计信息不存在: {key}")
             else:
+                # 检查是否请求任务列表
+                get_tasks = body.get('get_tasks', False)
+                if get_tasks:
+                    from .tasks import get_recent_check_all_nodes_tasks
+                    limit = int(body.get('limit', 10))
+                    tasks_info = get_recent_check_all_nodes_tasks(limit)
+                    
+                    return pub_success_response({
+                        'tasks': tasks_info,
+                        'total_count': len(tasks_info)
+                    })
+                
                 # 获取所有统计信息（按需获取特定类型的统计）
                 stats = SystemHealthStats.objects.all()
                 

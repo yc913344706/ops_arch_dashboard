@@ -1,5 +1,7 @@
+import uuid
 from celery import shared_task
 from django.utils import timezone
+from django.db import transaction
 
 from lib.time_tools import utc_obj_to_time_zone_str
 from lib.redis_tool import get_redis_value, set_redis_value, delete_redis_value
@@ -10,6 +12,37 @@ from lib.log import color_logger
 from .alert_config_parser import alert_config_parser, AlertRule
 import operator
 from datetime import timedelta
+
+def deduplicate_basic_info_list(basic_info_list):
+    """
+    去除basic_info_list中的重复项
+    """
+    seen_combinations = set()
+    unique_list = []
+    
+    for basic_info in basic_info_list:
+        # 创建唯一标识符：host:port，若无端口则只使用host
+        host = basic_info.get('host')
+        port = basic_info.get('port')
+        
+        if host and port:
+            identifier = f"{host}:{port}"
+        elif host:
+            identifier = f"{host}"
+        else:
+            # 如果既没有host也没有port，则保留原项
+            unique_list.append(basic_info)
+            continue
+        
+        if identifier not in seen_combinations:
+            seen_combinations.add(identifier)
+            # 添加一个去重后的标记，用于后续处理
+            unique_item = basic_info.copy()
+            unique_item['deduplicated_id'] = identifier
+            unique_list.append(unique_item)
+    
+    return unique_list
+
 
 def _record_node_health_check_duration(node_uuid, start_time, check_duration=None):
     node_uuid = str(node_uuid)
@@ -31,12 +64,12 @@ def _record_node_health_check_duration(node_uuid, start_time, check_duration=Non
     )
 
 @shared_task
-def check_node_health(node_uuid, parent_task_lock_key=None):
+def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
     """
-    检查单个节点健康状态
+    检查单个节点健康状态（异步优化版）
     """
     start_time = timezone.now()
-    success = False  # 标记是否成功完成
+    success = False
     
     try:
         color_logger.info(f"Start checking node health: {node_uuid}")
@@ -52,7 +85,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None):
             # 创建健康记录
             NodeHealth.objects.create(
                 node=node,
-                healthy_status='unknown',  # Since there's no basic info, we can't determine health
+                healthy_status='unknown',
                 response_time=None,
                 probe_result={'details': node.basic_info_list},
                 error_message='No basic info to check'
@@ -63,108 +96,266 @@ def check_node_health(node_uuid, parent_task_lock_key=None):
             success = True
             return
 
-        # 遍历节点的所有基础信息，执行探活，并更新 basic_info_list 中的 is_healthy 状态
+        # 对 basic_info_list 进行去重
+        unique_basic_info_list = deduplicate_basic_info_list(node.basic_info_list)
+        
+        # 使用异步探针管理器
+        from .async_probes import AsyncProbeManager
+        probe_manager = AsyncProbeManager(timeout=3)
+        
+        # 提取需要检测的主机和端口
+        hosts_to_ping = []
+        host_port_pairs = []
+        
+        for basic_info in unique_basic_info_list:
+            host = basic_info.get('host')
+            port = basic_info.get('port')
+            
+            if host:
+                hosts_to_ping.append((host, basic_info.get('deduplicated_id')))
+            
+            if host and port:
+                host_port_pairs.append((host, port, basic_info.get('deduplicated_id')))
+        
+        # 并发执行检测任务
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # 并发执行ping检测
+            ping_tasks = []
+            for host, dedup_id in hosts_to_ping:
+                ping_tasks.append(probe_manager.ping_async(host))
+            
+            ping_results = loop.run_until_complete(
+                asyncio.gather(*ping_tasks, return_exceptions=True)
+            )
+            
+            # 并发执行端口检测
+            port_tasks = []
+            for host, port, dedup_id in host_port_pairs:
+                port_tasks.append(probe_manager.port_check_async(host, port))
+            
+            port_results = loop.run_until_complete(
+                asyncio.gather(*port_tasks, return_exceptions=True)
+            )
+        finally:
+            loop.close()
+        
+        # 构建检测结果映射
+        ping_result_map = {}
+        for i, result in enumerate(ping_results):
+            if not isinstance(result, Exception):
+                ping_result_map[result['host']] = result
+            else:
+                host = hosts_to_ping[i][0]
+                ping_result_map[host] = {
+                    'host': host,
+                    'is_healthy': False,
+                    'response_time': None,
+                    'error_message': str(result)
+                }
+        
+        port_result_map = {}
+        for i, result in enumerate(port_results):
+            if not isinstance(result, Exception):
+                port_result_map[f"{result['host']}:{result['port']}"] = result
+            else:
+                host, port = host_port_pairs[i][:2]
+                port_result_map[f"{result['host']}:{result['port']}"] = {
+                    'host': host,
+                    'port': port,
+                    'is_healthy': False,
+                    'response_time': None,
+                    'error_message': str(result)
+                }
+        
+        # 更新 basic_info_list 中的健康状态（保持原始列表结构）
         updated_basic_info_list = []
         healthy_count = 0
         total_response_time = 0
         probe_count = 0
         
-        for basic_info in node.basic_info_list:
-            host = basic_info.get('host')
-            port = basic_info.get('port')
+        for original_basic_info in node.basic_info_list:
+            updated_info = original_basic_info.copy()
+            host = original_basic_info.get('host')
+            port = original_basic_info.get('port')
             
-            # Create a copy of the basic_info to update
-            updated_info = basic_info.copy()
-            updated_info['is_healthy'] = True  # Assume healthy initially
-            
-            # Perform checks and update is_healthy status
+            # 假设初始健康
+            updated_info['is_healthy'] = True
+
+            # 检查ping结果
             if host:
-                # 执行Ping检测
-                probe = get_probe_instance('ping', {})
-                result = probe.check_with_host(node, host)
-                color_logger.info(f"Ping check result for {host}: {result}")
-                if not result['is_healthy']:
+                ping_result = ping_result_map.get(host)
+                if ping_result and not ping_result['is_healthy']:
                     updated_info['is_healthy'] = False
-                if result.get('response_time'):
-                    total_response_time += result['response_time']
-                    probe_count += 1
-                    
-            if port and host:  # 如果有端口和主机，则执行端口检测
-                probe = get_probe_instance('port', {'timeout': 3})
-                result = probe.check_with_host_port(node, host, port)
-                color_logger.info(f"Port check result for {host}:{port}: {result}")
-                if not result['is_healthy']:
-                    updated_info['is_healthy'] = False
-                if result.get('response_time'):
-                    total_response_time += result['response_time']
-                    probe_count += 1
-            elif port:  # 如果只有端口，使用节点的IP地址
-                probe = get_probe_instance('port', {'timeout': 3})
-                result = probe.check_with_host_port(node, node.link.name, port)  # 使用节点链接名作为主机名占位符
-                color_logger.info(f"Port check result for {node.link.name}:{port}: {result}")
-                if not result['is_healthy']:
-                    updated_info['is_healthy'] = False
-                if result.get('response_time'):
-                    total_response_time += result['response_time']
+                if ping_result and ping_result.get('response_time'):
+                    total_response_time += ping_result['response_time']
                     probe_count += 1
             
-            # Count total healthy items for status determination
+            # 检查端口结果
+            if host and port:
+                port_key = f"{host}:{port}"
+                port_result = port_result_map.get(port_key)
+                if port_result and not port_result['is_healthy']:
+                    updated_info['is_healthy'] = False
+                if port_result and port_result.get('response_time'):
+                    total_response_time += port_result['response_time']
+                    probe_count += 1
+            elif port:  # 只有端口的情况
+                # 使用节点链接名作为主机名
+                port_key = f"{node.link.name}:{port}"
+                port_result = port_result_map.get(port_key)
+                if port_result and not port_result['is_healthy']:
+                    updated_info['is_healthy'] = False
+                if port_result and port_result.get('response_time'):
+                    total_response_time += port_result['response_time']
+                    probe_count += 1
+            
             if updated_info['is_healthy']:
                 healthy_count += 1
-                
+            
             updated_basic_info_list.append(updated_info)
 
         avg_response_time = total_response_time / probe_count if probe_count > 0 else None
         
-        # Determine the overall healthy status based on the results
+        # 确定整体健康状态
         total_count = len(updated_basic_info_list)
         if healthy_count == total_count:
-            healthy_status = 'green'  # All healthy
+            healthy_status = 'green'  # 全部健康
         elif healthy_count == 0:
-            healthy_status = 'red'  # All unhealthy
+            healthy_status = 'red'  # 全部不健康
         else:
-            healthy_status = 'yellow'  # Partially healthy
-        
-        # Update the node with the new basic_info_list and healthy_status
-        node.basic_info_list = updated_basic_info_list
-        node.healthy_status = healthy_status
-        node.last_check_time = timezone.now()
-        node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
-        
-        # Create health record
-        health_record = NodeHealth.objects.create(
-            node=node,
-            healthy_status=healthy_status,
-            response_time=avg_response_time,
-            probe_result={'details': updated_basic_info_list},
-            error_message=None if healthy_status == 'green' else 'One or more checks failed',
-            # 添加检查耗时到 probe_result
-            create_time=timezone.now()  # 确保记录正确的创建时间
-        )
+            healthy_status = 'yellow'  # 部分健康
+
+        # 更新节点
+        with transaction.atomic():
+            node.basic_info_list = updated_basic_info_list
+            node.healthy_status = healthy_status
+            node.last_check_time = timezone.now()
+            node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
+
+            # 创建健康记录
+            health_record = NodeHealth.objects.create(
+                node=node,
+                healthy_status=healthy_status,
+                response_time=avg_response_time,
+                probe_result={'details': updated_basic_info_list},
+                error_message=None if healthy_status == 'green' else 'One or more checks failed'
+            )
 
         _record_node_health_check_duration(node_uuid, start_time)
         
-        # 使用配置驱动的方式处理告警，而不是硬编码逻辑
-        # 通过定期任务 check_all_alerts 来处理告警
-        # 这样可以更灵活地管理告警规则
-        
         color_logger.info(f"Node {node.name} health check completed: {healthy_status}")
-        color_logger.info(f"Finish checking node health: {node_uuid}")
         success = True
         
     except Node.DoesNotExist:
         _record_node_health_check_duration(node_uuid, start_time, -1)
         color_logger.warning(f"Node with uuid {node_uuid} does not exist or is inactive")
-        color_logger.info(f"Warn checking node health: {node_uuid}")
     except Exception as e:
         _record_node_health_check_duration(node_uuid, start_time, -2)
-        color_logger.error(f"Error checking node health {node_uuid}: {str(e)}")
-        color_logger.info(f"Error checking node health: {node_uuid}")
+        color_logger.error(f"Error checking node health {node_uuid}: {str(e)}", exc_info=True)
     finally:
-        # 检查是否需要释放父任务的锁，无论成功与否都要从待处理集合中移除
-        # 这样即使任务失败，也不会导致主锁永远无法释放
+        # 如果有任务UUID，更新Redis中对应任务的结束时间
+        if task_uuid:
+            try:
+                redis_conn = get_redis_connection("default")
+                task_redis_key = f"check_all_nodes_task:{task_uuid}"
+                
+                # 设置当前时间作为最新的更新时间
+                redis_conn.hset(task_redis_key, 'end_time', timezone.now().isoformat())
+            except Exception as redis_error:
+                color_logger.error(f"Error updating task end time for task_uuid {task_uuid}: {str(redis_error)}", exc_info=True)
+        
         if parent_task_lock_key:
             _check_and_release_parent_lock(parent_task_lock_key, node_uuid, success)
+
+def get_check_all_nodes_task_info(task_uuid):
+    """
+    获取指定任务UUID的详细信息
+    """
+    redis_conn = get_redis_connection("default")
+    task_redis_key = f"check_all_nodes_task:{task_uuid}"
+    
+    # 获取Redis哈希中的所有字段
+    task_info = redis_conn.hgetall(task_redis_key)
+    
+    # 解码字节字符串为普通字符串（如果需要）
+    decoded_task_info = {}
+    for key, value in task_info.items():
+        if isinstance(key, bytes):
+            key = key.decode('utf-8')
+        if isinstance(value, bytes):
+            value = value.decode('utf-8')
+        decoded_task_info[key] = value
+    
+    if decoded_task_info:
+        # 计算任务耗时（如果已有开始和结束时间）
+        start_time_str = decoded_task_info.get('start_time')
+        end_time_str = decoded_task_info.get('final_end_time') or decoded_task_info.get('end_time')
+        
+        if start_time_str and end_time_str:
+            try:
+                from datetime import datetime
+                import re
+                # 处理ISO格式的时间字符串，兼容各种格式
+                # 移除末尾的Z并处理时区信息
+                start_time_str_clean = start_time_str.replace('Z', '+00:00') if start_time_str.endswith('Z') else start_time_str
+                end_time_str_clean = end_time_str.replace('Z', '+00:00') if end_time_str.endswith('Z') else end_time_str
+                
+                # 如果时间字符串包含时区信息，直接解析；否则添加默认时区
+                if '+' in start_time_str_clean or start_time_str_clean.endswith('-00:00'):
+                    start_time = datetime.fromisoformat(start_time_str_clean)
+                else:
+                    # 如果没有时区信息，添加默认时区
+                    if start_time_str_clean.count(':') == 2:  # YYYY-MM-DDTHH:MM:SS.ffffff 格式
+                        start_time = datetime.fromisoformat(start_time_str_clean + '+00:00')
+                    else:
+                        start_time = datetime.fromisoformat(start_time_str_clean)
+                
+                if '+' in end_time_str_clean or end_time_str_clean.endswith('-00:00'):
+                    end_time = datetime.fromisoformat(end_time_str_clean)
+                else:
+                    if end_time_str_clean.count(':') == 2:
+                        end_time = datetime.fromisoformat(end_time_str_clean + '+00:00')
+                    else:
+                        end_time = datetime.fromisoformat(end_time_str_clean)
+                
+                duration = (end_time - start_time).total_seconds()
+                decoded_task_info['duration_seconds'] = duration
+            except Exception as e:
+                color_logger.error(f"Error calculating duration for task {task_uuid}: {str(e)}")
+    
+    return decoded_task_info
+
+
+def get_recent_check_all_nodes_tasks(limit=10):
+    """
+    获取最近的check_all_nodes任务列表
+    """
+    redis_conn = get_redis_connection("default")
+    
+    # 查找所有check_all_nodes任务键
+    task_keys = redis_conn.keys("check_all_nodes_task:*")
+    
+    # 提取任务UUID并获取任务信息
+    tasks_info = []
+    for task_key in task_keys:
+        if isinstance(task_key, bytes):
+            task_key = task_key.decode('utf-8')
+        
+        task_uuid = task_key.replace("check_all_nodes_task:", "")
+        task_info = get_check_all_nodes_task_info(task_uuid)
+        
+        if task_info:  # 只添加存在的任务
+            task_info['task_uuid'] = task_uuid
+            tasks_info.append(task_info)
+    
+    # 按开始时间排序，返回最新的limit个任务
+    tasks_info.sort(key=lambda x: x.get('start_time', ''), reverse=True)
+    return tasks_info[:limit]
+
 
 def _check_and_release_parent_lock(parent_task_lock_key, node_uuid, success=True):
     """
@@ -185,7 +376,41 @@ def _check_and_release_parent_lock(parent_task_lock_key, node_uuid, success=True
         remaining_count = redis_conn.scard(pending_nodes_key)
         
         if remaining_count == 0:
-            # 所有节点都已完成，删除主锁和待处理集合
+            # 所有节点都已完成
+            # 查找与这个锁关联的任务UUID
+            # 从Redis hash中获取任务信息，其中可能包含task_uuid
+            # 从锁键名中提取任务UUID
+            # 锁键的格式是 "ops_arch_dashboard_check_all_nodes_lock"
+            # 相应的Redis hash键格式是 "check_all_nodes_task:{task_uuid}"
+            
+            # 遍历所有可能的任务键，找到与当前锁相关的任务
+            # 为了更精确地处理这个逻辑，我们采用另一种方法：
+            # 从锁数据中解析出任务UUID，如果有的话
+            # 或者在锁数据中存储任务UUID信息
+            lock_data = get_redis_value('default', parent_task_lock_key)
+            if lock_data:
+                try:
+                    # 锁数据格式为 "node_count:start_time"，但实际已存储在Redis hash中
+                    # 我们需要通过某种方式找到相关的任务键
+                    # 简单的方法是通过Redis键模式查找
+                    task_keys = redis_conn.keys("check_all_nodes_task:*")
+                    if task_keys:
+                        # 找到最近的活动任务，通常是最相关的
+                        for task_key in task_keys:
+                            # 检查该任务键是否已经设置了结束时间
+                            if not redis_conn.hexists(task_key, 'final_end_time'):
+                                # 设置最终结束时间
+                                redis_conn.hset(task_key, 'final_end_time', timezone.now().isoformat())
+                                redis_conn.hset(task_key, 'status', 'completed')
+                                # 保留这个键一段时间用于历史记录，不立即删除
+                                redis_conn.expire(task_key, 3600)  # 1小时后过期
+                                color_logger.info(f"Task {task_key} completed and final end time recorded")
+                                break
+            
+                except Exception as task_error:
+                    color_logger.error(f"Error updating final task end time: {str(task_error)}", exc_info=True)
+            
+            # 删除主锁和待处理集合
             redis_conn.delete(parent_task_lock_key)
             redis_conn.delete(pending_nodes_key)
             color_logger.info(f"All node health checks completed, lock {parent_task_lock_key} released")
@@ -206,6 +431,10 @@ def check_all_nodes():
     检查所有节点的健康状态
     """
     from django.conf import settings
+    
+    # 生成一个唯一任务ID
+    task_uuid = str(uuid.uuid4())
+    task_redis_key = f"check_all_nodes_task:{task_uuid}"
     
     # 使用 Redis 锁来防止重复运行
     redis_key = 'ops_arch_dashboard_check_all_nodes_lock'
@@ -232,9 +461,19 @@ def check_all_nodes():
         estimated_duration = min(7200, 1800 + node_count * 60)  # 30分钟基础 + 每个节点1分钟，上限2小时
         set_redis_value('default', redis_key, lock_data, set_expire=estimated_duration)
         
-        # 使用 Redis 集合来管理待处理的节点 UUID
+        # 使用 Redis 记录任务的开始时间
         redis_conn = get_redis_connection("default")
+        task_info = {
+            'start_time': start_time.isoformat(),
+            'node_count': node_count,
+            'estimated_duration': estimated_duration,
+            'task_uuid': task_uuid
+        }
+        redis_conn.hset(task_redis_key, mapping=task_info)
+        # 设置过期时间，与主锁相同的过期时间
+        redis_conn.expire(task_redis_key, estimated_duration)
         
+        # 使用 Redis 集合来管理待处理的节点 UUID
         pending_nodes_key = f"{redis_key}_pending_nodes"
         # 先删除可能存在的旧集合
         redis_conn.delete(pending_nodes_key)
@@ -257,8 +496,8 @@ def check_all_nodes():
             check_node_health.apply_async(
                 args=[str(node.uuid)], 
                 countdown=countdown,
-                # 传递锁键名到子任务，以便在子任务完成时检查是否需要释放锁
-                kwargs={'parent_task_lock_key': redis_key}
+                # 传递锁键名和任务UUID到子任务
+                kwargs={'parent_task_lock_key': redis_key, 'task_uuid': task_uuid}
             )
             scheduled_count += 1
         
@@ -268,6 +507,7 @@ def check_all_nodes():
             defaults={
                 'value': utc_obj_to_time_zone_str(start_time),
                 'meta_info': {
+                    'task_uuid': task_uuid,
                     'node_count': node_count, 
                     'start_time': utc_obj_to_time_zone_str(start_time),
                     'scheduled_count': scheduled_count,
@@ -276,9 +516,9 @@ def check_all_nodes():
             }
         )
         
-        color_logger.info(f"Started checking {node_count} nodes health, scheduled {scheduled_count} subtasks with lock {redis_key} and pending nodes set {pending_nodes_key}, estimated duration: {estimated_duration}s")
+        color_logger.info(f"Started checking {node_count} nodes health, scheduled {scheduled_count} subtasks with lock {redis_key} and pending nodes set {pending_nodes_key}, estimated duration: {estimated_duration}s, task_uuid: {task_uuid}")
         
-        return f"Scheduled {scheduled_count} node health checks"
+        return f"Scheduled {scheduled_count} node health checks with task_uuid {task_uuid}"
     
     except Exception as e:
         # 如果出错，清理 Redis 键，确保不会永久锁定
@@ -287,6 +527,8 @@ def check_all_nodes():
             redis_conn.delete(redis_key)
             pending_nodes_key = f"{redis_key}_pending_nodes"
             redis_conn.delete(pending_nodes_key)
+            # 清理任务相关键
+            redis_conn.delete(task_redis_key)
             color_logger.error(f"Error in check_all_nodes, cleaned up locks: {str(e)}")
         except:
             pass  # 如果清理也失败，就不处理了

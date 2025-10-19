@@ -13,7 +13,7 @@
           <span class="stat-value">{{ lastCheckTime || "-" }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">单节点最长检查耗时</span>
+          <span class="stat-label">总检查耗时</span>
           <span class="stat-value">{{ totalCheckDuration || "-" }}</span>
         </div>
         <div class="stat-item">
@@ -618,21 +618,81 @@ const closeSilenceDialog = () => {
 // 获取健康统计信息
 const fetchHealthStats = async () => {
   try {
-    const response = await systemHealthStatsApi.getSystemHealthStats();
+    // 获取最新的任务列表，只取第一个（最新的任务）
+    const response = await systemHealthStatsApi.getSystemHealthStats({ get_tasks: true, limit: 1 });
     const data = response.data;
 
-    if (data.last_node_check) {
-      lastCheckTime.value = data.last_node_check.value;
+    if (data.tasks && data.tasks.length > 0) {
+      const latestTask = data.tasks[0];
+      lastCheckTime.value = latestTask.start_time;
+      
+      // 如果有总耗时信息（以秒为单位），转换为更易读的格式
+      if (latestTask.duration_seconds !== undefined) {
+        const durationMs = latestTask.duration_seconds * 1000;
+        totalCheckDuration.value = 
+          durationMs.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }) + " ms";
+      } else {
+        // 如果没有计算出的总耗时，尝试使用Redis记录的结束时间和开始时间的差值
+        if (latestTask.start_time && (latestTask.final_end_time || latestTask.end_time)) {
+          try {
+            const startTime = new Date(latestTask.start_time);
+            const endTime = new Date(latestTask.final_end_time || latestTask.end_time);
+            const durationMs = endTime.getTime() - startTime.getTime();
+            totalCheckDuration.value = 
+              durationMs.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }) + " ms";
+          } catch (e) {
+            console.error("计算任务耗时失败:", e);
+            // 如果计算失败，回退到旧方法
+            const fallbackResponse = await systemHealthStatsApi.getSystemHealthStats();
+            const fallbackData = fallbackResponse.data;
+            if (fallbackData.total_check_duration !== undefined) {
+              totalCheckDuration.value =
+                fallbackData.total_check_duration.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }) + " ms";
+            }
+          }
+        } else {
+          // 如果没有完整的时间信息，回退到旧方法
+          const fallbackResponse = await systemHealthStatsApi.getSystemHealthStats();
+          const fallbackData = fallbackResponse.data;
+          if (fallbackData.total_check_duration !== undefined) {
+            totalCheckDuration.value =
+              fallbackData.total_check_duration.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }) + " ms";
+          }
+        }
+      }
+      
+      totalNodesChecked.value = latestTask.node_count || 0;
+    } else {
+      // 如果没有任务数据，回退到原始的统计方法
+      const fallbackResponse = await systemHealthStatsApi.getSystemHealthStats();
+      const fallbackData = fallbackResponse.data;
+      
+      if (fallbackData.last_node_check) {
+        lastCheckTime.value = fallbackData.last_node_check.meta_info?.start_time || fallbackData.last_node_check.value;
+      }
+      
+      if (fallbackData.total_check_duration !== undefined) {
+        totalCheckDuration.value =
+          fallbackData.total_check_duration.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }) + " ms";
+      }
+      
+      totalNodesChecked.value = fallbackData.total_nodes_checked;
     }
-    // 显示并行执行的实际耗时（毫秒）
-    if (data.total_check_duration !== undefined) {
-      totalCheckDuration.value =
-        data.total_check_duration.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }) + " ms";
-    }
-    totalNodesChecked.value = data.total_nodes_checked;
   } catch (error) {
     console.error("获取健康统计信息失败:", error);
     // 不显示错误消息，因为这个信息不是关键的
