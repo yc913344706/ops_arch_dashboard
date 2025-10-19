@@ -48,6 +48,7 @@ class LinkView(View):
                     'name': link.name,
                     'description': link.description,
                     'is_active': link.is_active,
+                    'check_single_point': link.check_single_point,
                     'created_by': {
                         'uuid': str(link.created_by.uuid) if link.created_by else None,
                         'username': link.created_by.username if link.created_by else None,
@@ -74,11 +75,12 @@ class LinkView(View):
             body = pub_get_request_body(request)
             user_name = request.user_name
             
-            create_keys = ['name', 'description', 'is_active']
+            create_keys = ['name', 'description', 'is_active', 'check_single_point']
             create_dict = {key: value for key, value in body.items() if key in create_keys}
             
             # 设置默认值
             create_dict['is_active'] = body.get('is_active', True)
+            create_dict['check_single_point'] = body.get('check_single_point', False)
             
             # 关联创建者（如果需要）
             from apps.user.models import User
@@ -92,7 +94,8 @@ class LinkView(View):
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'description': link.description,
-                'is_active': link.is_active
+                'is_active': link.is_active,
+                'check_single_point': link.check_single_point
             })
         except Exception as e:
             color_logger.error(f"创建架构图失败: {e.args}")
@@ -109,7 +112,7 @@ class LinkView(View):
             link = Link.objects.filter(uuid=uuid).first()
             assert link, '更新的架构图不存在'
 
-            update_keys = ['name', 'description', 'is_active']
+            update_keys = ['name', 'description', 'is_active', 'check_single_point']
             update_dict = {key: value for key, value in body.items() if key in update_keys}
             
             for key, value in update_dict.items():
@@ -120,7 +123,8 @@ class LinkView(View):
                 'uuid': str(link.uuid),
                 'name': link.name,
                 'description': link.description,
-                'is_active': link.is_active
+                'is_active': link.is_active,
+                'check_single_point': link.check_single_point
             })
         except Exception as e:
             color_logger.error(f"更新架构图失败: {e.args}")
@@ -156,6 +160,7 @@ class LinkDetailView(View):
                 'name': link.name,
                 'description': link.description,
                 'is_active': link.is_active,
+                'check_single_point': link.check_single_point,
                 'create_time': link.create_time.isoformat() if link.create_time else None,
                 'update_time': link.update_time.isoformat() if link.update_time else None
             })

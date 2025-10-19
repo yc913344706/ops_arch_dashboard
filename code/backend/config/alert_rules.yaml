@@ -56,3 +56,25 @@ alerts:
     message: "节点 {node_name} HTTP服务不可用，状态码: {status_code}"
     check_interval: "5m"
     data_source: "node_health"
+
+  # 单点检测告警规则 - 缺少基本配置信息
+  single_point_missing:
+    enabled: true
+    description: "单点检测-缺少基本配置信息"
+    condition: "basic_info_count == 0"
+    duration: "1m"
+    severity: "CRITICAL"
+    message: "节点 {node_name} 的basic_info_list为空，无法进行单点检测"
+    check_interval: "5m"
+    data_source: "node_health"
+
+  # 单点检测告警规则 - 存在单点风险
+  single_point_warning:
+    enabled: true
+    description: "单点检测-存在单点风险"
+    condition: "basic_info_count == 1"
+    duration: "1m"
+    severity: "MEDIUM"
+    message: "节点 {node_name} 的basic_info_list只有1个配置项，存在单点风险"
+    check_interval: "5m"
+    data_source: "node_health"

@@ -40,6 +40,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="检测单点" width="100">
+          <template #default="scope">
+            <el-tag :type="scope.row.check_single_point ? 'warning' : 'info'">
+              {{ scope.row.check_single_point ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_by.nickname" label="创建者" width="120" />
         <el-table-column prop="create_time" label="创建时间" width="180" />
         <el-table-column label="操作" width="200">
@@ -105,6 +112,13 @@
             inactive-text="禁用"
           />
         </el-form-item>
+        <el-form-item label="检测单点" prop="check_single_point">
+          <el-switch
+            v-model="linkForm.check_single_point"
+            active-text="是"
+            inactive-text="否"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -149,7 +163,8 @@ const linkForm = reactive({
   uuid: '',
   name: '',
   description: '',
-  is_active: true
+  is_active: true,
+  check_single_point: false
 })
 
 // 表单验证规则
@@ -306,14 +321,16 @@ const submitLinkForm = async () => {
             uuid: linkForm.uuid,
             name: linkForm.name,
             description: linkForm.description,
-            is_active: linkForm.is_active
+            is_active: linkForm.is_active,
+            check_single_point: linkForm.check_single_point
           })
           ElMessage.success('更新成功')
         } else {
           await linkApi.createLink({
             name: linkForm.name,
             description: linkForm.description,
-            is_active: linkForm.is_active
+            is_active: linkForm.is_active,
+            check_single_point: linkForm.check_single_point
           })
           ElMessage.success('创建成功')
         }

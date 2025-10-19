@@ -76,29 +76,88 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         color_logger.info(f"Start checking node health: {node_uuid}")
         node = Node.objects.get(uuid=node_uuid, is_active=True)
         
+        # 添加日志记录节点的基本信息
+        color_logger.info(f"Node {node.name} (UUID: {node_uuid}) - basic_info_list length: {len(node.basic_info_list) if node.basic_info_list else 0}, content: {node.basic_info_list}")
+        color_logger.info(f"Node {node.name} - link.check_single_point: {node.link.check_single_point}")
+        
         # 检查节点是否有 basic_info_list
         if not node.basic_info_list or len(node.basic_info_list) == 0:
-            # 没有基本信息，状态为未知
-            node.healthy_status = 'unknown'
-            node.last_check_time = timezone.now()
-            node.save(update_fields=['healthy_status', 'last_check_time'])
+            # 没有基本信息
+            total_count = 0
+            color_logger.info(f"Node {node.name} has empty basic_info_list, processing empty case")
             
-            # 创建健康记录
-            NodeHealth.objects.create(
-                node=node,
-                healthy_status='unknown',
-                response_time=None,
-                probe_result={'details': node.basic_info_list},
-                error_message='No basic info to check'
-            )
-            
-            _record_node_health_check_duration(node_uuid, start_time)
-            color_logger.info(f"Node {node.name} health check completed: unknown (no basic info)")
-            success = True
-            return
+            # 如果链路需要检测单点，即使没有基本配置信息，也要应用单点检测逻辑
+            # 但不在此处创建告警，告警统一由 check_all_alerts 处理
+            if node.link.check_single_point:
+                # 应用单点检测逻辑 - 0个基础配置信息，应为red级别
+                healthy_status = 'red'
+                
+                # 创建健康记录，包含单点检测相关信息
+                probe_result_with_single_point = {
+                    'details': node.basic_info_list, 
+                    'single_point_status': 'missing',
+                    'single_point_count': 0
+                }
+                NodeHealth.objects.create(
+                    node=node,
+                    healthy_status=healthy_status,
+                    response_time=None,
+                    probe_result=probe_result_with_single_point,
+                    error_message='No basic info to check for single point detection'
+                )
+                
+                # 更新节点状态
+                node.healthy_status = healthy_status
+                node.last_check_time = timezone.now()
+                node.save(update_fields=['healthy_status', 'last_check_time'])
+                
+                # 将健康记录写入InfluxDB（时序数据库）
+                try:
+                    influxdb_manager = InfluxDBManager()
+                    influxdb_manager.write_node_health_data(
+                        node_uuid=str(node.uuid),
+                        healthy_status=healthy_status,
+                        response_time=None,
+                        probe_result=probe_result_with_single_point,
+                        error_message='No basic info to check for single point detection'
+                    )
+                    color_logger.info(f"Wrote node health data to InfluxDB for node {node.name}")
+                except Exception as e:
+                    color_logger.error(f"Failed to write to InfluxDB: {str(e)}", exc_info=True)
+                    # 即使InfluxDB写入失败，也不影响主流程
 
-        # 对 basic_info_list 进行去重
+                _record_node_health_check_duration(node_uuid, start_time)
+                color_logger.info(f"Node {node.name} health check completed: {healthy_status} (single point detection data updated)")
+                success = True
+                return
+            else:
+                # 没有基本信息且不需要检测单点，状态为未知
+                color_logger.info(f"Node {node.name} has empty basic_info_list but not checking single point, setting to unknown")
+                node.healthy_status = 'unknown'
+                node.last_check_time = timezone.now()
+                node.save(update_fields=['healthy_status', 'last_check_time'])
+                
+                # 创建健康记录
+                NodeHealth.objects.create(
+                    node=node,
+                    healthy_status='unknown',
+                    response_time=None,
+                    probe_result={'details': node.basic_info_list},
+                    error_message='No basic info to check'
+                )
+                
+                _record_node_health_check_duration(node_uuid, start_time)
+                color_logger.info(f"Node {node.name} health check completed: unknown (no basic info)")
+                success = True
+                return
+        else:
+            total_count = len(node.basic_info_list)
+            color_logger.info(f"Node {node.name} has {total_count} items in basic_info_list, proceeding with normal check")
+            # 后续处理将在下面继续进行
+
+        # 对 basic_info_list 进行去重（只有在basic_info_list不为空时才执行）
         unique_basic_info_list = deduplicate_basic_info_list(node.basic_info_list)
+        color_logger.info(f"Node {node.name} - After deduplication: original count {len(node.basic_info_list)}, unique count {len(unique_basic_info_list)}")
         
         # 使用异步探针管理器
         from .async_probes import AsyncProbeManager
@@ -230,12 +289,38 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         else:
             healthy_status = 'yellow'  # 部分健康
 
+        # 如果链路需要检测单点，则根据basic_info_list数量调整健康状态
+        # 注意：对于空basic_info_list的情况，已经在上面的早期检查中处理
+        # 所以此处的total_count应始终基于非空列表（长度大于0）
+        # 但告警处理统一由 check_all_alerts 完成，此处只更新节点状态和记录
+        if node.link.check_single_point:
+            if total_count == 1:
+                # 只有1个基础配置信息，应为yellow级别
+                healthy_status = 'yellow'
+            # 注意：对于 total_count > 1 的情况，healthy_status 已经由之前的逻辑设置好了
+
         # 更新节点
         with transaction.atomic():
             node.basic_info_list = updated_basic_info_list
             node.healthy_status = healthy_status
             node.last_check_time = timezone.now()
             node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
+
+        # 在probe_result中添加单点检测状态信息，供check_all_alerts使用
+        single_point_status = 'normal'
+        if node.link.check_single_point:
+            if total_count == 0:
+                single_point_status = 'missing'  # 这个情况应该不会到达这里，因为0的情况在上面就return了
+            elif total_count == 1:
+                single_point_status = 'warning'
+            else:
+                single_point_status = 'normal'
+
+        probe_result_with_single_point = {
+            'details': updated_basic_info_list, 
+            'single_point_status': single_point_status, 
+            'single_point_count': total_count
+        }
 
         # 将健康记录写入InfluxDB（时序数据库）
         try:
@@ -244,7 +329,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 node_uuid=str(node.uuid),
                 healthy_status=healthy_status,
                 response_time=avg_response_time,
-                probe_result={'details': updated_basic_info_list},
+                probe_result=probe_result_with_single_point,
                 error_message=None if healthy_status == 'green' else 'One or more checks failed'
             )
             color_logger.info(f"Wrote node health data to InfluxDB for node {node.name}")
@@ -780,6 +865,88 @@ def check_alert_conditions(node, health_record, rule: AlertRule):
     根据规则检查节点是否触发告警
     """
     try:
+        # 处理单点检测相关的规则（single_point_missing, single_point_warning）
+        # 现在由 check_all_alerts 统一处理，基于健康记录中的信息进行判断
+        if rule.name in ['single_point_missing', 'single_point_warning']:
+            # 获取最新的健康记录来判断单点状态
+            if health_record:
+                probe_result = health_record.probe_result or {}
+                single_point_status = probe_result.get('single_point_status')
+                single_point_count = probe_result.get('single_point_count', len(probe_result.get('details', [])) if 'details' in probe_result else 0)
+                
+                if rule.name == 'single_point_missing' and single_point_status == 'missing':
+                    # basic_info_list 为空，触发 SINGLE_POINT_MISSING 告警
+                    alert_description = rule.message.format(
+                        node_name=node.name,
+                        basic_info_count=0
+                    )
+                    
+                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    
+                    create_or_update_alert(
+                        node=node,
+                        alert_type=rule.name.upper().replace('-', '_'),
+                        alert_subtype=alert_subtype,
+                        title=f"节点{node.name}缺少基本配置信息",
+                        description=f"节点{node.name}的basic_info_list为空，无法进行单点检测",
+                        severity=rule.severity
+                    )
+                elif rule.name == 'single_point_warning' and single_point_status == 'warning':
+                    # basic_info_list 只有1个，触发 SINGLE_POINT_WARNING 告警
+                    alert_description = rule.message.format(
+                        node_name=node.name,
+                        single_point_count=single_point_count
+                    )
+                    
+                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    
+                    create_or_update_alert(
+                        node=node,
+                        alert_type=rule.name.upper().replace('-', '_'),
+                        alert_subtype=alert_subtype,
+                        title=f"节点{node.name}存在单点风险",
+                        description=f"节点{node.name}的basic_info_list只有1个配置项，存在单点风险",
+                        severity=rule.severity
+                    )
+                elif rule.name in ['single_point_missing', 'single_point_warning'] and single_point_status in ['normal', 'warning', 'missing']:
+                    # 对于其他情况，检查是否需要关闭相应的告警
+                    # 如果当前状态不是对应告警的状态，则关闭该类型的告警
+                    if rule.name == 'single_point_missing' and single_point_status != 'missing':
+                        # 关闭 SINGLE_POINT_MISSING 告警
+                        close_resolved_alerts(
+                            node=node,
+                            alert_type='SINGLE_POINT_MISSING'
+                        )
+                    elif rule.name == 'single_point_warning' and single_point_status != 'warning':
+                        # 关闭 SINGLE_POINT_WARNING 告警
+                        close_resolved_alerts(
+                            node=node,
+                            alert_type='SINGLE_POINT_WARNING'
+                        )
+            else:
+                # 没有健康记录，但basic_info_list可能为空
+                basic_info_count = len(node.basic_info_list) if node.basic_info_list else 0
+                if rule.name == 'single_point_missing' and basic_info_count == 0:
+                    # basic_info_list 为空，触发 SINGLE_POINT_MISSING 告警
+                    alert_description = rule.message.format(
+                        node_name=node.name,
+                        basic_info_count=0
+                    )
+                    
+                    alert_subtype = rule.name.replace('_', ' ').title().replace(' ', '')
+                    
+                    create_or_update_alert(
+                        node=node,
+                        alert_type=rule.name.upper().replace('-', '_'),
+                        alert_subtype=alert_subtype,
+                        title=f"节点{node.name}缺少基本配置信息",
+                        description=f"节点{node.name}的basic_info_list为空，无法进行单点检测",
+                        severity=rule.severity
+                    )
+            
+            # 处理完单点检测规则后直接返回，不继续处理通用逻辑
+            return
+
         # 如果规则需要聚合历史数据（如平均响应时间），则获取时间窗口内的数据
         if rule.aggregation and rule.time_window:
             # 解析时间窗口，例如 '5m', '10m', '1h', '1d' 等

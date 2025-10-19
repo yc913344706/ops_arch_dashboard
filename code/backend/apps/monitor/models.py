@@ -105,6 +105,7 @@ class Link(BaseModel):
     description = models.TextField(blank=True, null=True, verbose_name='链路描述')
 
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
+    check_single_point = models.BooleanField(default=False, verbose_name='是否检测单点')
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
