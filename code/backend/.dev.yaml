@@ -79,3 +79,10 @@ REDIS: {
     "AUTH": 3,
   },
 }
+
+INFLUXDB: {
+  "URL": "http://db_ts:8086",
+  "TOKEN": "influxdb_admin_token_2025",
+  "ORG": "ops_org",
+  "BUCKET": "monitoring"
+}

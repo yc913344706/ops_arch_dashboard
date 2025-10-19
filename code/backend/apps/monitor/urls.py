@@ -31,4 +31,7 @@ urlpatterns = [
     
     # 系统健康统计接口
     path('system_health_stats/', views.SystemHealthStatsView.as_view(), name='system-health-stats'),
+    
+    # 时序监控数据接口
+    path('ts-data/node-health/', views.NodeHealthTSView.as_view(), name='node-health-ts'),
 ]

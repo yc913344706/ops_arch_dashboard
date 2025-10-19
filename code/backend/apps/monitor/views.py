@@ -12,6 +12,7 @@ from django.db.models.expressions import Window
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models.expressions import RawSQL
+from lib.influxdb_tool import InfluxDBManager
 
 class LinkView(View):
     """架构图相关接口"""
@@ -541,39 +542,81 @@ class NodeHealthView(View):
             body = pub_get_request_body(request)
             node_uuid = body.get('uuid')
             node = Node.objects.get(uuid=node_uuid)
-            latest_health = node.health_records.first()  # 获取最新健康记录
+            
+            # 从InfluxDB获取最新的健康数据
+            influxdb_manager = InfluxDBManager()
+            try:
+                # 查询最近的健康记录
+                from datetime import datetime, timedelta
+                # 查询最近1小时的数据
+                start_time = (timezone.now() - timedelta(hours=1)).isoformat()
+                health_records = influxdb_manager.query_node_health_data(
+                    node_uuid=node_uuid,
+                    start_time=start_time,
+                    limit=1
+                )
+                
+                if health_records:
+                    latest_record = health_records[0]  # 最新的一条记录
+                    data = {
+                        'uuid': str(node.uuid),
+                        'name': node.name,
+                        'healthy_status': latest_record.get('healthy_status'),
+                        'response_time': latest_record.get('response_time'),
+                        'last_check_time': latest_record.get('time').isoformat() if latest_record.get('time') else None,
+                        'probe_result': {},  # InfluxDB中暂不存储完整probe_result，可以通过其他API获取
+                        'error_message': latest_record.get('error_message'),
+                        'total_checks': latest_record.get('total_checks'),
+                        'failed_checks': latest_record.get('failed_checks')
+                    }
+                else:
+                    # 如果InfluxDB没有数据，回退到节点状态
+                    data = {
+                        'uuid': str(node.uuid),
+                        'name': node.name,
+                        'healthy_status': node.healthy_status,
+                        'response_time': None,
+                        'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
+                        'probe_result': {},
+                        'error_message': None,
+                        'total_checks': None,
+                        'failed_checks': None
+                    }
+            except Exception as influx_error:
+                color_logger.error(f"从InfluxDB获取节点健康状态失败: {str(influx_error)}", exc_info=True)
+                # 如果InfluxDB查询失败，回退到原来的MySQL查询
+                latest_health = node.health_records.first()
+                # 获取此节点的检查耗时统计
+                from .models import SystemHealthStats
+                duration_stat = SystemHealthStats.objects.filter(
+                    key=f'node_check_duration_{node_uuid}'
+                ).first()
 
-            # 获取此节点的检查耗时统计
-            from .models import SystemHealthStats
-            duration_stat = SystemHealthStats.objects.filter(
-                key=f'node_check_duration_{node_uuid}'
-            ).first()
-
-            if latest_health:
-                data = {
-                    'uuid': str(node.uuid),
-                    'name': node.name,
-                    'healthy_status': latest_health.healthy_status,
-                    'response_time': latest_health.response_time,
-                    'last_check_time': latest_health.create_time.isoformat() if latest_health.create_time else None,
-                    'probe_result': latest_health.probe_result,
-                    'error_message': latest_health.error_message,
-                    'check_duration_ms': float(duration_stat.value) if duration_stat else None,
-                    'check_duration_info': duration_stat.meta_info if duration_stat else None
-                }
-            else:
-                # 如果没有健康记录，使用节点的当前状态
-                data = {
-                    'uuid': str(node.uuid),
-                    'name': node.name,
-                    'healthy_status': node.healthy_status,
-                    'response_time': None,
-                    'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
-                    'probe_result': {},
-                    'error_message': None,
-                    'check_duration_ms': float(duration_stat.value) if duration_stat else None,
-                    'check_duration_info': duration_stat.meta_info if duration_stat else None
-                }
+                if latest_health:
+                    data = {
+                        'uuid': str(node.uuid),
+                        'name': node.name,
+                        'healthy_status': latest_health.healthy_status,
+                        'response_time': latest_health.response_time,
+                        'last_check_time': latest_health.create_time.isoformat() if latest_health.create_time else None,
+                        'probe_result': latest_health.probe_result,
+                        'error_message': latest_health.error_message,
+                        'check_duration_ms': float(duration_stat.value) if duration_stat else None,
+                        'check_duration_info': duration_stat.meta_info if duration_stat else None
+                    }
+                else:
+                    # 如果没有健康记录，使用节点的当前状态
+                    data = {
+                        'uuid': str(node.uuid),
+                        'name': node.name,
+                        'healthy_status': node.healthy_status,
+                        'response_time': None,
+                        'last_check_time': node.last_check_time.isoformat() if node.last_check_time else None,
+                        'probe_result': {},
+                        'error_message': None,
+                        'check_duration_ms': float(duration_stat.value) if duration_stat else None,
+                        'check_duration_info': duration_stat.meta_info if duration_stat else None
+                    }
 
             return pub_success_response(data)
         except Node.DoesNotExist:
@@ -1421,7 +1464,7 @@ class MonitorDashboardView(View):
         }
     
     def get_health_trend_data(self, period='week', start_date=None, end_date=None):
-        """获取健康趋势数据"""
+        """获取健康趋势数据（使用InfluxDB时序数据）"""
         # 根据周期参数确定时间范围
         now = timezone.now()
         if start_date and end_date:
@@ -1448,153 +1491,191 @@ class MonitorDashboardView(View):
                 # 默认为周
                 start_date = timezone.localtime(now) - timedelta(weeks=1)
             end_date = timezone.localtime(now)
-        
-        # 生成时间序列
-        # 确定间隔以生成适当数量的数据点
+
+        try:
+            # 使用InfluxDB获取健康趋势数据
+            influxdb_manager = InfluxDBManager()
+            
+            # 获取所有活跃节点的UUID列表
+            active_node_uuids = [str(node.uuid) for node in Node.objects.filter(is_active=True)]
+            
+            if not active_node_uuids:
+                return {
+                    'period': period,
+                    'data': []
+                }
+            
+            # 查询指定时间范围内的健康数据
+            health_records = influxdb_manager.query_multiple_nodes_health(
+                node_uuids=active_node_uuids,
+                start_time=start_date.isoformat(),
+                end_time=end_date.isoformat() if end_date else None
+            )
+            
+            # 按时间段统计健康状态
+            trend_data = []
+            
+            # 根据周期生成时间点
+            time_points = []
+            if period == 'day':
+                # 按小时统计
+                current_time = start_date.replace(minute=0, second=0, microsecond=0)
+                end_time = end_date.replace(minute=0, second=0, microsecond=0)
+                while current_time <= end_time:
+                    time_points.append(current_time)
+                    current_time += timedelta(hours=1)
+            elif period == 'week':
+                # 按天统计
+                current_date = start_date.date()
+                end_date_obj = end_date.date()
+                while current_date <= end_date_obj:
+                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_date += timedelta(days=1)
+            elif period == 'month':
+                # 按天统计
+                current_date = start_date.date()
+                end_date_obj = end_date.date()
+                while current_date <= end_date_obj:
+                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_date += timedelta(days=1)
+            elif period == 'quarter':
+                # 按周统计
+                current_date = start_date.date()
+                end_date_obj = end_date.date()
+                while current_date <= end_date_obj:
+                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    current_date += timedelta(weeks=1)
+            else:  # year
+                # 按月统计
+                current_date = start_date.date()
+                end_date_obj = end_date.date()
+                while current_date <= end_date_obj:
+                    time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
+                    if current_date.month == 12:
+                        current_date = current_date.replace(year=current_date.year + 1, month=1)
+                    else:
+                        try:
+                            current_date = current_date.replace(month=current_date.month + 1)
+                        except ValueError:  # 处理月份天数问题
+                            if current_date.month in [1, 3, 5, 7, 8, 10, 12]:
+                                current_date = current_date.replace(day=30, month=current_date.month + 1)
+                            else:
+                                current_date = current_date.replace(day=28, month=current_date.month + 1)
+            
+            # 为每个时间段统计健康状态
+            for i in range(len(time_points) - 1):
+                period_start = time_points[i]
+                period_end = time_points[i + 1]
+                
+                # 统计该时间段内的状态
+                status_counts = {'green': 0, 'yellow': 0, 'red': 0, 'unknown': 0}
+                
+                # 遍历每个节点的数据
+                for node_id, records in health_records.items():
+                    # 找到该时间段内该节点的记录
+                    period_records = [r for r in records 
+                                    if period_start <= r['time'].replace(tzinfo=None).replace(tzinfo=timezone.utc if r['time'].tzinfo is None else r['time'].tzinfo) < period_end.replace(tzinfo=None)]
+                    if period_records:
+                        # 以最新的记录为准
+                        latest_record = max(period_records, key=lambda x: x['time'])
+                        status = latest_record.get('healthy_status', 'unknown')
+                        if status in status_counts:
+                            status_counts[status] += 1
+                    else:
+                        # 如果该时间段内没有记录，使用节点当前状态
+                        node = Node.objects.filter(uuid=node_id).first()
+                        if node:
+                            current_status = node.healthy_status
+                            if current_status in status_counts:
+                                status_counts[current_status] += 1
+                
+                trend_data.append({
+                    'date': period_start.isoformat(),
+                    'green_count': status_counts['green'],
+                    'yellow_count': status_counts['yellow'],
+                    'red_count': status_counts['red'],
+                    'unknown_count': status_counts['unknown']
+                })
+            
+            # 如果InfluxDB没有足够的数据，使用回退逻辑
+            if not trend_data and NodeHealth.objects.exists(): # 只在MySQL中有数据且InfluxDB无数据时才回退
+                # 使用原有的基于MySQL的逻辑作为回退
+                return self._get_health_trend_data_fallback(period, start_date, end_date)
+
+            return {
+                'period': period,
+                'data': trend_data
+            }
+            
+        except Exception as e:
+            color_logger.error(f"从InfluxDB获取健康趋势数据失败: {str(e)}", exc_info=True)
+            # 回退到原有逻辑
+            return self._get_health_trend_data_fallback(period, start_date, end_date)
+    
+    def _get_health_trend_data_fallback(self, period, start_date, end_date):
+        """回退到MySQL获取健康趋势数据"""
+        # 原有逻辑...
+        now = timezone.now()
+        if not start_date or not end_date:
+            if period == 'day':
+                start_date = now - timedelta(days=1)
+            elif period == 'week':
+                start_date = now - timedelta(weeks=1)
+            elif period == 'month':
+                start_date = now - timedelta(days=30)
+            elif period == 'quarter':
+                start_date = now - timedelta(days=90)
+            elif period == 'year':
+                start_date = now - timedelta(days=365)
+            else:
+                start_date = now - timedelta(weeks=1)
+            end_date = now
+
         time_points = []
         if period == 'day':
-            # 按小时统计，生成从24小时前到当前时间的整点时间点
-            # 例如：如果现在是10月8日10:52，则时间点为昨天10月7日11:00 到 今天10月8日10:00
-            # 计算开始整点（24小时前的整点）和结束整点（当前时间的整点）
             start_hour_point = start_date.replace(minute=0, second=0, microsecond=0)
             end_hour_point = end_date.replace(minute=0, second=0, microsecond=0)
-            
             current_hour = start_hour_point
             while current_hour <= end_hour_point:
                 time_points.append(current_hour)
                 current_hour += timedelta(hours=1)
-        elif period == 'week':
-            # 按天统计
+        elif period in ['week', 'month']:
             current_date = start_date.date()
             end_date_date = end_date.date()
             while current_date <= end_date_date:
-                time_point = timezone.make_aware(datetime.combine(current_date, datetime.min.time()))
-                time_points.append(time_point.date())  # 保持原格式
+                time_points.append(timezone.make_aware(datetime.combine(current_date, datetime.min.time())))
                 current_date += timedelta(days=1)
-        elif period == 'month':
-            # 按天统计
-            current_date = start_date.date()
-            end_date_date = end_date.date()
-            while current_date <= end_date_date:
-                time_points.append(current_date)
-                current_date += timedelta(days=1)
-        elif period == 'quarter':
-            # 按周统计 - 从周一作为一周的开始
-            current_date = start_date.date()
-            # 将开始日期调整为当周的周一
-            current_date = current_date - timedelta(days=current_date.weekday())
-            end_date_date = end_date.date()
-            while current_date <= end_date_date:
-                time_points.append(current_date)
-                current_date += timedelta(weeks=1)
-        else:  # year
-            # 按月统计
-            current_date = start_date.date()
-            end_date_date = end_date.date()
-            while current_date <= end_date_date:
-                time_points.append(current_date)
-                # 移动到下个月 - 确保日期有效
-                if current_date.month == 12:
-                    current_date = current_date.replace(year=current_date.year + 1, month=1)
-                else:
-                    # 尝试简单递增月份
-                    try:
-                        current_date = current_date.replace(month=current_date.month + 1)
-                    except ValueError:
-                        # 处理像1月31日 -> 2月31日这样的无效日期
-                        # 移动到下个月的最后一天
-                        if current_date.month == 1:  # 跳过2月到3月
-                            current_date = current_date.replace(day=28, month=2)
-                        else:  # 其他月份
-                            next_month = current_date.month + 1
-                            if next_month in [4, 6, 9, 11]:  # 30天的月份
-                                current_date = current_date.replace(day=30, month=next_month)
-                            else:  # 31天的月份
-                                current_date = current_date.replace(day=31, month=next_month)
-        
-        # 获取健康数据
+
         trend_data = []
-        for i, time_point in enumerate(time_points):
-            if period == 'day':
-                # 按小时统计，时间段从当前整点开始，到下一个整点或实际结束时间
-                start_time = time_point
-                next_hour = time_point + timedelta(hours=1)
-                
-                # 如果下一整点超过实际的结束时间，使用实际结束时间
-                if next_hour > end_date:
-                    end_time = end_date
-                else:
-                    end_time = next_hour
-            elif period == 'week':
-                # 按天统计
-                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
-                end_time = start_time + timedelta(days=1)
-            elif period == 'month':
-                # 按天统计
-                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
-                end_time = start_time + timedelta(days=1)
-            elif period == 'quarter':
-                # 按周统计 - 从当前日期到下一周的同一天
-                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
-                end_time = start_time + timedelta(weeks=1)
-            else:  # year, 按月统计
-                # 对于月份，需要正确处理月份跨越
-                start_time = timezone.make_aware(datetime.combine(time_point, datetime.min.time()))
-                
-                # 计算下一个月的对应日期
-                if time_point.month == 12:
-                    next_month_date = time_point.replace(year=time_point.year + 1, month=1)
-                else:
-                    try:
-                        next_month_date = time_point.replace(month=time_point.month + 1)
-                    except ValueError:  # 处理如1月31日到2月31日无效日期
-                        # 将日期调整为下个月的最后一天
-                        if time_point.month == 1:  # 跳到2月
-                            if (time_point.year % 4 == 0 and time_point.year % 100 != 0) or time_point.year % 400 == 0:
-                                next_month_date = time_point.replace(day=29, month=2)
-                            else:
-                                next_month_date = time_point.replace(day=28, month=2)
-                        elif time_point.month in [3, 5, 8, 10]:  # 30天的月份 (原为4,6,9,11，但3/5/8/10月只有30天)
-                            next_month_date = time_point.replace(day=30, month=time_point.month + 1)
-                        else:  # 31天的月份，且该月份只有30天
-                            next_month_date = time_point.replace(day=30, month=time_point.month + 1)
-                
-                end_time = timezone.make_aware(datetime.combine(next_month_date, datetime.min.time()))
+        for time_point in time_points:
+            end_time = time_point + timedelta(days=1) if period in ['week', 'month'] else time_point + timedelta(hours=1)
             
-            # 获取时间段内的所有健康记录
             records_in_period = NodeHealth.objects.filter(
-                create_time__gte=start_time,
+                create_time__gte=time_point,
                 create_time__lt=end_time
             )
             
-            # 按节点ID分组，找出每个节点在时间段内的最高优先级状态
             node_highest_status = {}
             status_priority = {'red': 3, 'yellow': 2, 'unknown': 1, 'green': 0}
             
             for record in records_in_period:
                 node_id = record.node_id
                 current_status = record.healthy_status
-                
-                # 如果节点还没有记录，或者当前状态优先级更高，则更新
-                if node_id not in node_highest_status or \
-                   status_priority[current_status] > status_priority[node_highest_status[node_id]]:
+                if (node_id not in node_highest_status or 
+                    status_priority[current_status] > status_priority[node_highest_status[node_id]]):
                     node_highest_status[node_id] = current_status
             
-            # 统计没有健康记录的活跃节点，使用节点的当前状态
             all_node_ids_in_records = set(node_highest_status.keys())
-            nodes_without_records = Node.objects.filter(
-                is_active=True
-            ).exclude(uuid__in=all_node_ids_in_records)
+            nodes_without_records = Node.objects.filter(is_active=True).exclude(uuid__in=all_node_ids_in_records)
             
             for node in nodes_without_records:
                 node_highest_status[node.uuid] = node.healthy_status
             
-            # 按状态统计数量
             from collections import Counter
             status_counts = Counter(node_highest_status.values())
             
             trend_data.append({
-                'date': time_point.isoformat() if isinstance(time_point, datetime) else str(time_point),
+                'date': time_point.isoformat(),
                 'green_count': status_counts['green'],
                 'yellow_count': status_counts['yellow'],
                 'red_count': status_counts['red'],
@@ -1638,3 +1719,50 @@ class MonitorDashboardView(View):
             })
         
         return result
+
+
+class NodeHealthTSView(View):
+    """节点健康时序数据接口 - 专门用于查询InfluxDB中的监控数据"""
+    
+    def get(self, request):
+        """获取节点健康时序数据"""
+        try:
+            body = pub_get_request_body(request)
+            node_uuid = body.get('uuid')
+            if not node_uuid:
+                return pub_error_response("缺少节点UUID参数")
+                
+            start_time = body.get('start_time', (timezone.now() - timedelta(hours=1)).isoformat())
+            end_time = body.get('end_time')
+            limit = int(body.get('limit', 100))
+            
+            # 从InfluxDB获取数据
+            influxdb_manager = InfluxDBManager()
+            health_records = influxdb_manager.query_node_health_data(
+                node_uuid=node_uuid,
+                start_time=start_time,
+                end_time=end_time,
+                limit=limit
+            )
+            
+            # 格式化返回数据
+            formatted_records = []
+            for record in health_records:
+                formatted_records.append({
+                    'time': record['time'].isoformat() if record['time'] else None,
+                    'healthy_status': record['healthy_status'],
+                    'response_time': record.get('response_time'),
+                    'total_checks': record.get('total_checks'),
+                    'failed_checks': record.get('failed_checks'),
+                    'error_message': record.get('error_message')
+                })
+            
+            return pub_success_response({
+                'node_uuid': node_uuid,
+                'records': formatted_records,
+                'count': len(formatted_records)
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取节点健康时序数据失败: {e.args}")
+            return pub_error_response(f"获取节点健康时序数据失败: {e.args}")

@@ -9,6 +9,7 @@ from django_redis import get_redis_connection
 from .models import Node, NodeHealth, Alert, SystemHealthStats
 from .probes.factory import get_probe_instance
 from lib.log import color_logger
+from lib.influxdb_tool import InfluxDBManager
 from .alert_config_parser import alert_config_parser, AlertRule
 import operator
 from datetime import timedelta
@@ -236,14 +237,20 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
             node.last_check_time = timezone.now()
             node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
 
-            # 创建健康记录
-            health_record = NodeHealth.objects.create(
-                node=node,
+        # 将健康记录写入InfluxDB（时序数据库）
+        try:
+            influxdb_manager = InfluxDBManager()
+            influxdb_manager.write_node_health_data(
+                node_uuid=str(node.uuid),
                 healthy_status=healthy_status,
                 response_time=avg_response_time,
                 probe_result={'details': updated_basic_info_list},
                 error_message=None if healthy_status == 'green' else 'One or more checks failed'
             )
+            color_logger.info(f"Wrote node health data to InfluxDB for node {node.name}")
+        except Exception as e:
+            color_logger.error(f"Failed to write to InfluxDB: {str(e)}", exc_info=True)
+            # 即使InfluxDB写入失败，也不影响主流程
 
         _record_node_health_check_duration(node_uuid, start_time)
         
@@ -324,6 +331,8 @@ def get_check_all_nodes_task_info(task_uuid):
                 
                 duration = (end_time - start_time).total_seconds()
                 decoded_task_info['duration_seconds'] = duration
+                decoded_task_info['start_time'] = utc_obj_to_time_zone_str(start_time)
+                decoded_task_info['end_time'] = utc_obj_to_time_zone_str(end_time)
             except Exception as e:
                 color_logger.error(f"Error calculating duration for task {task_uuid}: {str(e)}")
     

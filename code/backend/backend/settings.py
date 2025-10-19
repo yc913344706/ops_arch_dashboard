@@ -24,6 +24,12 @@ f2 = open(f"{BASE_DIR}/.{os.environ.get('OPS_ARCH_DASHBOARD_ENV', 'dev')}.yaml",
 config_data = safe_load(f2.read())
 f2.close()
 
+# 加载InfluxDB配置到Django设置中
+INFLUXDB_URL = config_data.get('INFLUXDB', {}).get('URL', 'http://localhost:8086')
+INFLUXDB_TOKEN = config_data.get('INFLUXDB', {}).get('TOKEN', 'your-influxdb-token')
+INFLUXDB_ORG = config_data.get('INFLUXDB', {}).get('ORG', 'ops_org')
+INFLUXDB_BUCKET = config_data.get('INFLUXDB', {}).get('BUCKET', 'monitoring')
+
 set_color_logger_level(config_data.get('LOG_LEVEL', "DEBUG"))
 
 # Quick-start development settings - unsuitable for production

@@ -44,3 +44,4 @@ httpx
 pytest
 websockets
 gunicorn
+influxdb-client
