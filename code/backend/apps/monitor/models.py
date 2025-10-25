@@ -128,10 +128,6 @@ class Node(BaseModel):
     节点模型 - 架构图中的一个节点
     """
     name = models.CharField(max_length=200, verbose_name='节点名称')
-    basic_info_list = models.JSONField(
-        default=list,
-        verbose_name='基础信息列表'
-    )  # 存储主机/端口信息列表，格式：[{'host': 'xxx', 'port': 80}, ...]
     link = models.ForeignKey(
         Link,
         on_delete=models.CASCADE,
@@ -157,36 +153,6 @@ class Node(BaseModel):
     def __str__(self):
         return f"{self.link.name} - {self.name}"
 
-    def get_basic_info_list(self):
-        """
-        获取与旧basic_info_list格式兼容的数据列表
-        用于向后兼容，返回格式: [{'host': 'xxx', 'port': 80}, ...]
-        """
-        from .models import BaseInfo
-        
-        # 优先使用BaseInfo数据
-        base_info_items = BaseInfo.objects.filter(node=self)
-        if base_info_items.exists():
-            result = []
-            for base_info in base_info_items:
-                item = {'host': base_info.host}
-                if base_info.port:
-                    item['port'] = base_info.port
-                if hasattr(base_info, 'is_ping_disabled'):
-                    item['is_ping_disabled'] = base_info.is_ping_disabled
-                result.append(item)
-            return result
-        
-        # 如果BaseInfo不存在，返回当前的basic_info_list作为后备
-        return self.basic_info_list
-
-    def get_base_info_count(self):
-        """
-        获取BaseInfo项的数量
-        """
-        from .models import BaseInfo
-        return BaseInfo.objects.filter(node=self).count()
-
 
 class BaseInfo(BaseModel):
     """
@@ -210,7 +176,7 @@ class BaseInfo(BaseModel):
         # 由于port可能为空，我们需要使用约束来处理这种情况
         constraints = [
             models.UniqueConstraint(
-                fields=['node', 'host', 'port'],
+                fields=['host', 'port'],
                 name='unique_node_host_port'
             )
         ]

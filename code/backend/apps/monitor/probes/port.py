@@ -8,36 +8,21 @@ class PortProbe(BaseProbe):
     端口探活实现
     """
     def check(self, node):
-        # 为了向前兼容，我们仍然保留访问 basic_info_list 的方式
-        # 但在新架构中，我们会优先使用 BaseInfo 模型
+        # 使用 BaseInfo 模型
         from apps.monitor.models import BaseInfo
         
-        # 首先尝试使用新架构的 BaseInfo
+        # 尝试使用 BaseInfo
         base_info_items = BaseInfo.objects.filter(node=node)
         if base_info_items.exists():
             for base_info in base_info_items:
                 if base_info.port:  # 只有当端口存在时才进行端口检测
                     return self.check_with_host_port(node, base_info.host, base_info.port)
         
-        # 如果BaseInfo不存在，则尝试使用旧的字段
-        port = getattr(node, 'port', None)
-        if port:
-            host = getattr(node, 'host', None) or getattr(node, 'ip_address', None)
-            if host:
-                return self.check_with_host_port(node, host, port)
-        
-        # 如果以上都不行，则尝试使用旧的basic_info_list
-        if hasattr(node, 'basic_info_list') and node.basic_info_list:
-            for info in node.basic_info_list:
-                host = info.get('host')
-                port = info.get('port')
-                if host and port:
-                    return self.check_with_host_port(node, host, port)
-        
+        # 如果没有BaseInfo记录，返回错误
         return {
             'is_healthy': False,
             'response_time': 0,
-            'error_message': 'No host:port specified',
+            'error_message': 'No host:port specified in BaseInfo',
             'details': {}
         }
     

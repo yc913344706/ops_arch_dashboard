@@ -76,7 +76,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         color_logger.info(f"Start checking node health: {node_uuid}")
         node = Node.objects.get(uuid=node_uuid, is_active=True)
         
-        # 获取BaseInfo数据，优先使用新架构
+        # 获取BaseInfo数据
         from .models import BaseInfo
         base_info_items = BaseInfo.objects.filter(node=node).select_related('node')
         
@@ -101,7 +101,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 
                 # 创建健康记录，包含单点检测相关信息
                 probe_result_with_single_point = {
-                    'details': node.basic_info_list, 
+                    'details': [],  # 现在不再使用basic_info_list
                     'single_point_status': 'missing',
                     'single_point_count': 0,
                     'base_info_details': []  # 由于没有BaseInfo，所以为空
@@ -147,7 +147,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 
                 # 创建健康记录
                 probe_result = {
-                    'details': node.basic_info_list,
+                    'details': [],
                     'base_info_details': []
                 }
                 NodeHealth.objects.create(
@@ -235,57 +235,13 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                     'error_message': str(result)
                 }
         
-        # 更新 basic_info_list 中的健康状态（保持原始列表结构）
-        # 同时构建新的 base_info_details
-        updated_basic_info_list = []  # 保持向后兼容
+        # 构建新的 base_info_details
         base_info_details = []        # 新的数据结构，包含BaseInfo的所有信息
         healthy_count = 0
         total_response_time = 0
         probe_count = 0
-        
-        # 首先处理basic_info_list以保持向后兼容
-        for original_basic_info in node.basic_info_list:
-            updated_info = original_basic_info.copy()
-            host = original_basic_info.get('host')
-            port = original_basic_info.get('port')
-            
-            # 假设初始健康
-            updated_info['is_healthy'] = True
 
-            # 检查ping结果
-            if host:
-                ping_result = ping_result_map.get(host)
-                if ping_result and not ping_result['is_healthy']:
-                    updated_info['is_healthy'] = False
-                if ping_result and ping_result.get('response_time'):
-                    total_response_time += ping_result['response_time']
-                    probe_count += 1
-            
-            # 检查端口结果
-            if host and port:
-                port_key = f"{host}:{port}"
-                port_result = port_result_map.get(port_key)
-                if port_result and not port_result['is_healthy']:
-                    updated_info['is_healthy'] = False
-                if port_result and port_result.get('response_time'):
-                    total_response_time += port_result['response_time']
-                    probe_count += 1
-            elif port:  # 只有端口的情况
-                # 使用节点链接名作为主机名
-                port_key = f"{node.link.name}:{port}"
-                port_result = port_result_map.get(port_key)
-                if port_result and not port_result['is_healthy']:
-                    updated_info['is_healthy'] = False
-                if port_result and port_result.get('response_time'):
-                    total_response_time += port_result['response_time']
-                    probe_count += 1
-            
-            if updated_info['is_healthy']:
-                healthy_count += 1
-            
-            updated_basic_info_list.append(updated_info)
-        
-        # 然后处理BaseInfo数据
+        # 处理BaseInfo数据
         for base_info in base_info_items:
             base_info_detail = {
                 'uuid': str(base_info.uuid),
@@ -314,7 +270,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                     total_response_time += port_result['response_time']
                     probe_count += 1
             
-            # 如果base_info_detail不健康，则影响总体健康计数
+            # 如果base_info_detail健康，则影响总体健康计数
             if base_info_detail['is_healthy']:
                 healthy_count += 1
                 
@@ -349,10 +305,9 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
 
         # 更新节点
         with transaction.atomic():
-            node.basic_info_list = updated_basic_info_list  # 保持向后兼容
             node.healthy_status = healthy_status
             node.last_check_time = timezone.now()
-            node.save(update_fields=['basic_info_list', 'healthy_status', 'last_check_time'])
+            node.save(update_fields=['healthy_status', 'last_check_time'])
 
         # 在probe_result中添加单点检测状态信息，供check_all_alerts使用
         single_point_status = 'normal'
@@ -365,7 +320,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 single_point_status = 'normal'
 
         probe_result_with_single_point = {
-            'details': updated_basic_info_list, 
+            'details': [],  # 不再使用basic_info_list
             'base_info_details': base_info_details,
             'single_point_status': single_point_status, 
             'single_point_count': total_count

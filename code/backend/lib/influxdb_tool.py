@@ -192,20 +192,40 @@ class InfluxDBManager:
             color_logger.error(f"Failed to query multiple nodes health data from InfluxDB: {str(e)}")
             return {}
 
-    def _format_time_for_flux(self, time_str):
-        """格式化时间字符串以符合Flux查询语法"""
-        if not time_str:
-            return time_str
-        
+    def _format_time_for_flux(self, time_input):
+        """格式化时间输入以符合Flux查询语法"""
+        if not time_input:
+            return "-1h"  # 默认返回1小时前
+
         # 检查是否已经是duration格式 (例如: -1h, 1d, etc.)
-        if re.match(r'^[-+]?[0-9]+(u|µ|ms|s|m|h|d|w|mo|y)$', time_str):
-            return time_str
+        if isinstance(time_input, str):
+            if re.match(r'^[-+]?[0-9]+(u|µ|ms|s|m|h|d|w|mo|y)$', time_input):
+                return time_input
+            # 如果是特殊值 "now()"，直接返回
+            elif time_input == "now()":
+                return time_input
+            # 如果是ISO格式的时间字符串，需要确保正确格式化
+            else:
+                # 在字符串时间周围添加引号
+                return f'"{time_input}"'
+
+        # 处理datetime对象
+        try:
+            from django.utils import timezone
+            import datetime as dt
+            if isinstance(time_input, (dt.datetime,)):
+                # 确保是时区感知的datetime
+                if timezone.is_aware(time_input):
+                    return f'"{time_input.isoformat()}"'
+                else:
+                    # 将naive datetime 转换为UTC
+                    utc_time = timezone.make_aware(time_input, timezone.utc)
+                    return f'"{utc_time.isoformat()}"'
+        except Exception:
+            color_logger.error(f"无法处理时间格式: {time_input}")
         
-        # 如果不是duration格式，则假定为RFC3339格式，用引号包围
-        if not time_str.startswith('"') and not time_str.endswith('"'):
-            return f'"{time_str}"'
-        
-        return time_str
+        # 如果都不是以上情况，返回默认值
+        return "-1h"
 
     def close(self):
         """关闭连接"""
