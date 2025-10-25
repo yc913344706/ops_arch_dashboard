@@ -8,8 +8,21 @@ class PingProbe(BaseProbe):
     Ping探活实现
     """
     def check(self, node):
-        # 为了向前兼容，我们仍然保留这个方法
-        # 在新架构中，我们会调用 check_with_host
+        # 为了向前兼容，我们仍然保留访问 basic_info_list 的方式
+        # 但在新架构中，我们会优先使用 BaseInfo 模型
+        from apps.monitor.models import BaseInfo
+        
+        # 首先尝试使用新架构的 BaseInfo
+        base_info_items = BaseInfo.objects.filter(node=node)
+        if base_info_items.exists():
+            for base_info in base_info_items:
+                # 检查是否禁ping
+                if base_info.is_ping_disabled:
+                    # 如果禁ping，则跳过ping检测
+                    continue
+                return self.check_with_host(node, base_info.host)
+        
+        # 如果BaseInfo不存在或全部禁ping，尝试使用旧的basic_info_list
         if hasattr(node, 'basic_info_list') and node.basic_info_list:
             # 如果节点有basic_info_list，则对第一个host进行ping
             for info in node.basic_info_list:

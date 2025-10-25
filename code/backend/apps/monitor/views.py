@@ -186,10 +186,13 @@ class LinkTopologyView(View):
             # 构建节点数据
             nodes_data = []
             for node in nodes:
+                # 兼容旧格式，同时提供新格式
+                base_info_items = node.get_basic_info_list()
                 nodes_data.append({
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'basic_info_list': node.basic_info_list,
+                    'basic_info_list': node.basic_info_list,  # 保持向后兼容
+                    'base_info_list_new': base_info_items,    # 新格式数据
                     'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
@@ -271,10 +274,14 @@ class NodeView(View):
                     key=f'node_check_duration_{node.uuid}'
                 ).first()
                 
+                # 获取BaseInfo数据
+                base_info_items = node.get_basic_info_list()
+                
                 result_data.append({
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'basic_info_list': node.basic_info_list,
+                    'basic_info_list': node.basic_info_list,  # 保持向后兼容
+                    'base_info_list_new': base_info_items,    # 新格式数据
                     'link': {
                         'uuid': str(node.link.uuid),
                         'name': node.link.name
@@ -323,10 +330,32 @@ class NodeView(View):
             
             node = Node.objects.create(**create_dict)
             
+            # 如果提供了base_info_list_new参数，则创建BaseInfo记录
+            base_info_list_new = body.get('base_info_list_new', [])
+            if base_info_list_new:
+                for base_info_item in base_info_list_new:
+                    host = base_info_item.get('host')
+                    if host:
+                        port = base_info_item.get('port')
+                        is_ping_disabled = base_info_item.get('is_ping_disabled', False)
+                        
+                        # 创建BaseInfo记录
+                        from .models import BaseInfo
+                        BaseInfo.objects.create(
+                            node=node,
+                            host=host,
+                            port=port,
+                            is_ping_disabled=is_ping_disabled
+                        )
+            
+            # 返回更新后的数据
+            base_info_items = node.get_basic_info_list()
+            
             return pub_success_response({
                 'uuid': str(node.uuid),
                 'name': node.name,
                 'basic_info_list': node.basic_info_list,
+                'base_info_list_new': base_info_items,
                 'link': str(node.link.uuid),
                 'is_active': node.is_active
             })
@@ -357,6 +386,28 @@ class NodeView(View):
                 setattr(node, key, value)
             node.save()
             
+            # 如果提供了base_info_list_new参数，则更新BaseInfo记录
+            base_info_list_new = body.get('base_info_list_new', [])
+            if base_info_list_new is not None:  # 如果提供了该参数（即使是空列表也表示要清空）
+                # 删除现有的BaseInfo记录
+                from .models import BaseInfo
+                BaseInfo.objects.filter(node=node).delete()
+                
+                # 创建新的BaseInfo记录
+                for base_info_item in base_info_list_new:
+                    host = base_info_item.get('host')
+                    if host:
+                        port = base_info_item.get('port')
+                        is_ping_disabled = base_info_item.get('is_ping_disabled', False)
+                        
+                        # 创建BaseInfo记录
+                        BaseInfo.objects.create(
+                            node=node,
+                            host=host,
+                            port=port,
+                            is_ping_disabled=is_ping_disabled
+                        )
+            
             # 尝试触发健康检查任务，但即使失败也不影响API响应
             try:
                 check_node_health.delay(node.uuid)
@@ -364,10 +415,14 @@ class NodeView(View):
                 color_logger.error(f"触发节点健康检查任务失败: {e.args}", exc_info=True)
                 # 不中断主流程，只是记录错误
 
+            # 返回更新后的数据
+            base_info_items = node.get_basic_info_list()
+            
             return pub_success_response({
                 'uuid': str(node.uuid),
                 'name': node.name,
                 'basic_info_list': node.basic_info_list,
+                'base_info_list_new': base_info_items,
                 'is_active': node.is_active
             })
         except Exception as e:

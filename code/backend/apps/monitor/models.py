@@ -157,6 +157,70 @@ class Node(BaseModel):
     def __str__(self):
         return f"{self.link.name} - {self.name}"
 
+    def get_basic_info_list(self):
+        """
+        获取与旧basic_info_list格式兼容的数据列表
+        用于向后兼容，返回格式: [{'host': 'xxx', 'port': 80}, ...]
+        """
+        from .models import BaseInfo
+        
+        # 优先使用BaseInfo数据
+        base_info_items = BaseInfo.objects.filter(node=self)
+        if base_info_items.exists():
+            result = []
+            for base_info in base_info_items:
+                item = {'host': base_info.host}
+                if base_info.port:
+                    item['port'] = base_info.port
+                if hasattr(base_info, 'is_ping_disabled'):
+                    item['is_ping_disabled'] = base_info.is_ping_disabled
+                result.append(item)
+            return result
+        
+        # 如果BaseInfo不存在，返回当前的basic_info_list作为后备
+        return self.basic_info_list
+
+    def get_base_info_count(self):
+        """
+        获取BaseInfo项的数量
+        """
+        from .models import BaseInfo
+        return BaseInfo.objects.filter(node=self).count()
+
+
+class BaseInfo(BaseModel):
+    """
+    基础信息模型 - 存储节点的主机和端口信息
+    """
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='base_info_items',
+        verbose_name='关联节点'
+    )
+    host = models.CharField(max_length=255, verbose_name='主机地址')
+    port = models.IntegerField(null=True, blank=True, verbose_name='端口')
+    is_ping_disabled = models.BooleanField(default=False, verbose_name='是否禁ping')
+
+    class Meta:
+        verbose_name = '基础信息'
+        verbose_name_plural = verbose_name
+        ordering = ['-create_time']
+        # 确保在同一节点下，host+port的组合是唯一的
+        # 由于port可能为空，我们需要使用约束来处理这种情况
+        constraints = [
+            models.UniqueConstraint(
+                fields=['node', 'host', 'port'],
+                name='unique_node_host_port'
+            )
+        ]
+
+    def __str__(self):
+        if self.port:
+            return f"{self.node.name} - {self.host}:{self.port}"
+        else:
+            return f"{self.node.name} - {self.host}"
+
 
 class NodeConnection(BaseModel):
     """
