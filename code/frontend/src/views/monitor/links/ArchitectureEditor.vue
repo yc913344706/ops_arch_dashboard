@@ -40,11 +40,11 @@
               <div class="node-info-panel">
                 <el-form :model="selectedNode" label-width="80px" size="small">
                   <el-form-item label="名称">
-                    <el-input v-model="selectedNode.style.labelText" />
+                    <el-input v-model="selectedNode.name" />
                   </el-form-item>
                   
                   <el-form-item label="服务列表">
-                    <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="basic-info-item">
+                    <div v-for="(info, index) in getBasicInfoList(selectedNode)" :key="index" class="basic-info-item">
                       <el-tag 
                         v-if="typeof info.is_healthy !== 'undefined'"
                         :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
@@ -68,6 +68,12 @@
                         type="number"
                         style="width: 20%; margin-right: 5px;"
                       />
+                      <el-checkbox 
+                        v-model="info.is_ping_disabled" 
+                        style="margin-right: 5px;"
+                      >
+                        禁Ping
+                      </el-checkbox>
                       <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
                     </div>
                     <el-button @click="addBasicInfo" size="small">添加主机/端口</el-button>
@@ -184,7 +190,7 @@
         </el-form-item>
         
         <el-form-item label="服务列表">
-          <div v-for="(info, index) in newNodeForm.basic_info_list" :key="index" class="basic-info-item">
+          <div v-for="(info, index) in newNodeForm.base_info_list" :key="index" class="basic-info-item">
             <el-tag 
               v-if="typeof info.is_healthy !== 'undefined'"
               :type="info.is_healthy === true ? 'success' : info.is_healthy === false ? 'danger' : 'info'"
@@ -208,6 +214,12 @@
               type="number"
               style="width: 20%; margin-right: 5px;"
             />
+            <el-checkbox 
+              v-model="info.is_ping_disabled" 
+              style="margin-right: 5px;"
+            >
+              禁Ping
+            </el-checkbox>
             <el-button @click="removeNewBasicInfo(index)" size="small" type="danger">删除</el-button>
           </div>
           <el-button @click="addNewBasicInfo" size="small">添加主机/端口</el-button>
@@ -250,7 +262,7 @@ const showCreateNodeDialog = ref(false)
 const createNodeDialogTitle = ref('新建节点')
 const newNodeForm = ref({
   name: '',
-  basic_info_list: [{}] // 默认添加一个空的信息项
+  base_info_list: [{}] // 默认添加一个空的信息项
 })
 const tempConnection = ref({
   to_node: ''
@@ -290,6 +302,7 @@ const filterDiagrams = (value: string) => {
 const loadDiagramData = async (diagramId: string) => {
   try {
     const response = await linkApi.getLinkTopology({uuid: diagramId})
+    console.log('Link topology response:', response.data)
     const { nodes, connections } = response.data
     
     // 转换连接数据为edges格式
@@ -300,8 +313,15 @@ const loadDiagramData = async (diagramId: string) => {
       healthy_status: conn.healthy_status
     }))
     
+    // 检查节点中是否有 base_info_list 数据
+    console.log('Nodes from backend:', nodes)
+    nodes.forEach((node, index) => {
+      console.log(`Node ${index} (${node.name}) base_info_list:`, node.base_info_list)
+    })
+    
     topologyData.value = {
       nodes: nodes.map(node => ({
+        // 保留所有节点信息，包括 base_info_list
         ...node,
         id: node.uuid,
         label: node.name
@@ -322,13 +342,41 @@ const onDiagramChange = async (value: string) => {
 }
 
 // 处理节点点击
-const handleNodeClick = (node: any) => {
+const handleNodeClick = async (node: any) => {
   console.log('Node clicked in editor:', node)
   console.log('Selected node before update:', selectedNode.value)
-  selectedNode.value = node ? { ...node } : null
+  
+  // 从 topologyData 中获取完整的节点数据（包含原始的 base_info_list）
+  const fullNodeData = topologyData.value.nodes.find(n => n.uuid === node.id || n.uuid === node.uuid)
+  if (fullNodeData) {
+    selectedNode.value = { ...fullNodeData }
+    console.log('Using full node data from topologyData:', fullNodeData)
+  } else {
+    // 如果未找到完整数据，则使用传入的节点数据
+    selectedNode.value = node ? { ...node } : null
+    console.log('Using node data from G6 event:', node)
+  }
+  
   console.log('Selected node after update:', selectedNode.value)
+  console.log('base_info_list content:', selectedNode.value?.base_info_list)
+  console.log('getBasicInfoList result:', getBasicInfoList(selectedNode.value))
 }
 
+
+// 获取基础信息列表
+const getBasicInfoList = (node: any) => {
+  console.log('getBasicInfoList called with node:', node)
+  if (node && node.base_info_list) {
+    console.log('base_info_list found:', node.base_info_list)
+    return node.base_info_list
+  } else if (node && node.basic_info_list) {
+    // 兼容G6组件可能修改的字段名
+    console.log('basic_info_list found (G6 compatibility):', node.basic_info_list)
+    return node.basic_info_list
+  }
+  console.log('base_info_list not found or is null/undefined')
+  return []
+}
 
 // 创建新节点 - 通用方法
 const createNewNode = () => {
@@ -341,21 +389,21 @@ const createNewNode = () => {
 const resetNewNodeForm = () => {
   newNodeForm.value = {
     name: '',
-    basic_info_list: [{ is_healthy: null }]
+    base_info_list: [{ is_healthy: null, is_ping_disabled: false }]
   }
 }
 
 // 添加新节点的基础信息
 const addNewBasicInfo = () => {
-  newNodeForm.value.basic_info_list.push({ is_healthy: null })
+  newNodeForm.value.base_info_list.push({ is_healthy: null, is_ping_disabled: false })
 }
 
 // 删除新节点的基础信息
 const removeNewBasicInfo = (index: number) => {
-  if (newNodeForm.value.basic_info_list.length > 1) {
-    newNodeForm.value.basic_info_list.splice(index, 1)
+  if (newNodeForm.value.base_info_list.length > 1) {
+    newNodeForm.value.base_info_list.splice(index, 1)
   } else {
-    newNodeForm.value.basic_info_list[0] = {}
+    newNodeForm.value.base_info_list[0] = { is_ping_disabled: false }
   }
 }
 
@@ -379,7 +427,7 @@ const confirmCreateNode = async () => {
 
     const newNode = await nodeApi.createNode({
       name: newNodeForm.value.name,
-      basic_info_list: newNodeForm.value.basic_info_list?.filter(info => info.host || info.port) || [],
+      base_info_list: newNodeForm.value.base_info_list?.filter(info => info.host || info.port) || [],
       link: selectedDiagram.value,
       position_x: Math.round(position_x),
       position_y: Math.round(position_y)
@@ -399,20 +447,19 @@ const confirmCreateNode = async () => {
 // 添加基础信息到选中节点
 const addBasicInfo = () => {
   if (selectedNode.value) {
-    if (!selectedNode.value.basic_info_list) {
-      selectedNode.value.basic_info_list = []
-    }
-    selectedNode.value.basic_info_list.push({ host: '', port: null, is_healthy: null })
+    const baseInfoList = getBasicInfoList(selectedNode.value)
+    baseInfoList.push({ host: '', port: null, is_ping_disabled: false, is_healthy: null })
   }
 }
 
 // 删除基础信息
 const removeBasicInfo = (index: number) => {
-  if (selectedNode.value && selectedNode.value.basic_info_list) {
-    if (selectedNode.value.basic_info_list.length > 1) {
-      selectedNode.value.basic_info_list.splice(index, 1)
+  if (selectedNode.value) {
+    const basicInfoList = getBasicInfoList(selectedNode.value)
+    if (basicInfoList.length > 1) {
+      basicInfoList.splice(index, 1)
     } else {
-      selectedNode.value.basic_info_list[0] = { host: '', port: null }
+      basicInfoList[0] = { host: '', port: null, is_ping_disabled: false }
     }
   }
 }
@@ -422,10 +469,11 @@ const updateNodeInfo = async () => {
   if (!selectedNode.value || !selectedNode.value.id) return
 
   try {
+    const baseInfoList = getBasicInfoList(selectedNode.value)
     await nodeApi.updateNode({
       uuid: selectedNode.value.id,
       name: selectedNode.value.name,
-      basic_info_list: selectedNode.value.basic_info_list?.filter((info: any) => info.host || info.port) || []
+      base_info_list: baseInfoList?.filter((info: any) => info.host || info.port) || []
     })
     
     // 更新本地数据

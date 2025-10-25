@@ -129,17 +129,21 @@ const fetchBaseInfoList = async () => {
     
     const allNodes = response.data.data || []
     
-    // 过滤并展开 basic_info_list_new 或 basic_info_list 数据
+    // 过滤并展开 base_info_list 数据
     let filteredData: any[] = []
+    console.log('All nodes for baseinfo:', allNodes)
     allNodes.forEach(node => {
       const nodeMatches = !filterForm.nodeName || node.name.toLowerCase().includes(filterForm.nodeName.toLowerCase())
       const linkMatches = !filterForm.linkName || node.link.name.toLowerCase().includes(filterForm.linkName.toLowerCase())
       
       if (nodeMatches && linkMatches) {
-        const nodeBaseInfoList = node.basic_info_list || []
+        console.log('Processing node:', node.name, 'base_info_list:', node.base_info_list)
+        const nodeBaseInfoList = node.base_info_list || []
         nodeBaseInfoList.forEach((baseInfo: any) => {
-          const hostMatches = !filterForm.host || baseInfo.host.toLowerCase().includes(filterForm.host.toLowerCase())
-          const portMatches = !filterForm.port || (baseInfo.port !== null && String(baseInfo.port).includes(filterForm.port))
+          const hostMatches = !filterForm.host || (baseInfo.host && baseInfo.host.toLowerCase().includes(filterForm.host.toLowerCase()))
+          const portMatches = !filterForm.port || (baseInfo.port !== null && baseInfo.port !== undefined && String(baseInfo.port).includes(filterForm.port))
+          
+          console.log('Base info item:', baseInfo, 'hostMatches:', hostMatches, 'portMatches:', portMatches)
           
           if (hostMatches && portMatches) {
             filteredData.push({

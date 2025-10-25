@@ -38,9 +38,9 @@
       
       <el-table :data="nodes" v-loading="loading">
         <el-table-column prop="name" label="节点名称" width="200" />
-        <el-table-column prop="basic_info_list" label="主机信息" width="300">
+        <el-table-column label="主机信息" width="350">
           <template #default="scope">
-            <div v-for="(info, index) in scope.row.basic_info_list" :key="index" class="host-info">
+            <div v-for="(info, index) in getBasicInfoList(scope.row)" :key="index" class="host-info">
               <span v-if="info.host">主机: {{ info.host }}</span>
               <span v-if="info.port" class="port-info">端口: {{ info.port }}</span>
               <el-tag 
@@ -53,8 +53,16 @@
                 <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
                 <span v-else style="font-size: 12px;">?</span>
               </el-tag>
+              <el-tag 
+                v-if="info.is_ping_disabled"
+                type="warning"
+                size="small"
+                style="margin-left: 5px;"
+              >
+                禁Ping
+              </el-tag>
             </div>
-            <span v-if="!scope.row.basic_info_list || scope.row.basic_info_list.length === 0">-</span>
+            <span v-if="!getBasicInfoList(scope.row) || getBasicInfoList(scope.row).length === 0">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="link.name" label="所属链路" min-width="200" />
@@ -124,7 +132,7 @@
           <el-descriptions-item label="创建时间">{{ selectedNode.create_time }}</el-descriptions-item>
           <el-descriptions-item label="更新时间">{{ selectedNode.update_time }}</el-descriptions-item>
           <el-descriptions-item label="主机信息" :span="2">
-            <div v-for="(info, index) in selectedNode.basic_info_list" :key="index" class="host-info">
+            <div v-for="(info, index) in getBasicInfoList(selectedNode)" :key="index" class="host-info">
               <span v-if="info.host">主机: {{ info.host }}</span>
               <span v-if="info.port" class="port-info">端口: {{ info.port }}</span>
               <el-tag 
@@ -137,8 +145,16 @@
                 <span v-else-if="info.is_healthy === false" style="font-size: 12px;">✗</span>
                 <span v-else style="font-size: 12px;">?</span>
               </el-tag>
+              <el-tag 
+                v-if="info.is_ping_disabled"
+                type="warning"
+                size="small"
+                style="margin-left: 5px;"
+              >
+                禁Ping
+              </el-tag>
             </div>
-            <span v-if="!selectedNode.basic_info_list || selectedNode.basic_info_list.length === 0">-</span>
+            <span v-if="!getBasicInfoList(selectedNode) || getBasicInfoList(selectedNode).length === 0">-</span>
           </el-descriptions-item>
         </el-descriptions>
       </div>
@@ -191,6 +207,7 @@ const fetchNodes = async () => {
       healthy_status: filterForm.healthy_status
     }
     const response = await nodeApi.getNodes(params)
+    console.log('Node list response:', response.data)
     nodes.value = response.data.data || []
     pagination.total = response.data.all_num || 0
   } catch (error) {
@@ -241,6 +258,17 @@ const getHealthStatusType = (status: string) => {
     'unknown': 'info'
   }
   return typeMap[status] || 'info'
+}
+
+// 获取基础信息列表
+const getBasicInfoList = (node: any) => {
+  console.log('getBasicInfoList called in nodes page with node:', node)
+  if (node && node.base_info_list) {
+    console.log('base_info_list found in nodes page:', node.base_info_list)
+    return node.base_info_list
+  }
+  console.log('base_info_list not found or is null/undefined in nodes page')
+  return []
 }
 
 // 查看节点详情
