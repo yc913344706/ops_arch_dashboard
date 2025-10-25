@@ -189,12 +189,12 @@ class LinkTopologyView(View):
             for node in nodes:
                 # 获取BaseInfo数据
                 base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-                base_info_list_new = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
+                base_info_list = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
                 
                 nodes_data.append({
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'base_info_list_new': base_info_list_new,    # 新格式数据
+                    'base_info_list': base_info_list,    # 新格式数据
                     'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
@@ -271,12 +271,12 @@ class NodeView(View):
                 # 获取BaseInfo数据
                 from .models import BaseInfo
                 base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-                base_info_list_new = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
+                base_info_list = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
                 
                 result_data.append({
                     'uuid': str(node.uuid),
                     'name': node.name,
-                    'base_info_list_new': base_info_list_new,    # 新格式数据
+                    'base_info_list': base_info_list,    # 新格式数据
                     'link': {
                         'uuid': str(node.link.uuid),
                         'name': node.link.name
@@ -324,10 +324,10 @@ class NodeView(View):
             
             node = Node.objects.create(**create_dict)
             
-            # 如果提供了base_info_list_new参数，则创建BaseInfo记录
-            base_info_list_new = body.get('base_info_list_new', [])
-            if base_info_list_new:
-                for base_info_item in base_info_list_new:
+            # 如果提供了 base_info_list 参数，则创建BaseInfo记录
+            base_info_list = body.get('base_info_list', [])
+            if base_info_list:
+                for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
@@ -345,12 +345,12 @@ class NodeView(View):
             # 返回更新后的数据
             from .models import BaseInfo
             base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-            base_info_list_new = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
+            base_info_list = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
             
             return pub_success_response({
                 'uuid': str(node.uuid),
                 'name': node.name,
-                'base_info_list_new': base_info_list_new,
+                'base_info_list': base_info_list,
                 'link': str(node.link.uuid),
                 'is_active': node.is_active
             })
@@ -377,15 +377,15 @@ class NodeView(View):
                 setattr(node, key, value)
             node.save()
             
-            # 如果提供了base_info_list_new参数，则更新BaseInfo记录
-            base_info_list_new = body.get('base_info_list_new', None)
-            if base_info_list_new is not None:  # 如果提供了该参数（即使是空列表也表示要清空）
+            # 如果提供了 base_info_list 参数，则更新BaseInfo记录
+            base_info_list = body.get('base_info_list', None)
+            if base_info_list is not None:  # 如果提供了该参数（即使是空列表也表示要清空）
                 # 删除现有的BaseInfo记录
                 from .models import BaseInfo
                 BaseInfo.objects.filter(node=node).delete()
                 
                 # 创建新的BaseInfo记录
-                for base_info_item in base_info_list_new:
+                for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
@@ -409,12 +409,12 @@ class NodeView(View):
             # 返回更新后的数据
             from .models import BaseInfo
             base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-            base_info_list_new = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
+            base_info_list = [{'uuid': str(item['uuid']), 'host': item['host'], 'port': item['port'], 'is_ping_disabled': item['is_ping_disabled']} for item in base_info_items]
             
             return pub_success_response({
                 'uuid': str(node.uuid),
                 'name': node.name,
-                'base_info_list_new': base_info_list_new,
+                'base_info_list': base_info_list,
                 'is_active': node.is_active
             })
         except Exception as e:

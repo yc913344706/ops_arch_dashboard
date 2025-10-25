@@ -40,6 +40,14 @@
           "showParent": true
         }
       },
+      "baseinfo": {
+        "path": "/monitor/baseinfo/index",
+        "name": "MonitorNodes",
+        "meta": {
+          "title": "主机管理",
+          "showParent": true
+        }
+      },
       "alerts": {
         "path": "/monitor/alerts/index",
         "name": "MonitorAlerts",

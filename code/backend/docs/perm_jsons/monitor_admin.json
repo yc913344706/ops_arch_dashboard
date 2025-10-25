@@ -21,6 +21,7 @@
       "monitor.links",
       "monitor.architecture",
       "monitor.nodes",
+      "monitor.baseinfo",
       "monitor.pushplus",
       "monitor.alerts"
     ],
