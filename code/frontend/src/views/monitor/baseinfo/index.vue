@@ -48,7 +48,7 @@
       <el-table :data="baseInfoList" v-loading="loading">
         <el-table-column prop="host" label="主机地址" width="200" />
         <el-table-column prop="port" label="端口" width="100" />
-        <el-table-column prop="is_ping_disabled" label="禁Ping" width="100">
+        <el-table-column prop="is_ping_disabled" label="禁Ping(默认)" width="100">
           <template #default="scope">
             <el-tag 
               :type="scope.row.is_ping_disabled ? 'warning' : 'success'"
@@ -69,20 +69,36 @@
           </template>
         </el-table-column>
         <el-table-column prop="remarks" label="备注" show-overflow-tooltip />
-        <el-table-column prop="node.name" label="所属节点" width="150" />
-        <el-table-column prop="node.link.name" label="所属链路" width="150" />
+        <el-table-column label="关联节点" width="200">
+          <template #default="scope">
+            <div v-for="node in scope.row.nodes" :key="node.uuid" class="node-item">
+              <el-tag type="info" size="small" style="margin-right: 4px; margin-bottom: 2px;">
+                {{ node.name }}
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="所属链路" width="150">
+          <template #default="scope">
+            <div v-for="node in scope.row.nodes" :key="node.uuid" class="link-item">
+              <el-tag type="success" size="small" style="margin-right: 4px; margin-bottom: 2px;">
+                {{ node.link.name }}
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="create_time" label="创建时间" width="160" />
-        <el-table-column label="操作" width="150">
+        <!-- <el-table-column label="操作" width="150">
           <template #default="scope">
             <el-button 
               size="small" 
               type="primary" 
-              @click="goToNodeInEditor(scope.row.node.uuid)"
+              @click="goToNodeInEditor(scope.row.nodes[0]?.uuid)"
             >
-              在架构图中查看
+              查看节点
             </el-button>
           </template>
-        </el-table-column>
+        </el-table-column> -->
       </el-table>
       
       <div class="pagination">
@@ -103,7 +119,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { nodeApi } from '@/api/monitor'
+import { baseInfoApi } from '@/api/monitor'
 import { useRouter } from 'vue-router'
 
 // 定义响应式数据
@@ -124,64 +140,25 @@ const pagination = reactive({
 const filterForm = reactive({
   host: '',
   port: '',
-  nodeName: '',
-  linkName: ''
+  nodeName: '',  // 实际不会用于新API，但保留以兼容前端界面
+  linkName: ''   // 实际不会用于新API，但保留以兼容前端界面
 })
 
 // 获取基础信息列表
 const fetchBaseInfoList = async () => {
   loading.value = true
   try {
-    // 由于后端API可能需要通过节点接口获取数据，我们获取所有节点然后过滤
-    const response = await nodeApi.getNodes({
-      page: 1,
-      page_size: 10000 // 获取所有节点
-    })
+    const params = {
+      page: pagination.currentPage,
+      page_size: pagination.pageSize,
+      search: filterForm.host || filterForm.port ? '' : '', // 如果有host或port过滤，不使用通用搜索
+      host: filterForm.host,
+      port: filterForm.port ? Number(filterForm.port) : null,
+    }
     
-    const allNodes = response.data.data || []
-    
-    // 过滤并展开 base_info_list 数据
-    let filteredData: any[] = []
-    let seenHostPorts = new Set() // 用于跟踪已处理的 host:port 组合
-    
-    console.log('All nodes for baseinfo:', allNodes)
-    allNodes.forEach(node => {
-      const nodeMatches = !filterForm.nodeName || node.name.toLowerCase().includes(filterForm.nodeName.toLowerCase())
-      const linkMatches = !filterForm.linkName || node.link.name.toLowerCase().includes(filterForm.linkName.toLowerCase())
-      
-      if (nodeMatches && linkMatches) {
-        console.log('Processing node:', node.name, 'base_info_list:', node.base_info_list)
-        const nodeBaseInfoList = node.base_info_list || []
-        nodeBaseInfoList.forEach((baseInfo: any) => {
-          const hostPortKey = `${baseInfo.host}:${baseInfo.port || 'null'}`
-          const hostMatches = !filterForm.host || (baseInfo.host && baseInfo.host.toLowerCase().includes(filterForm.host.toLowerCase()))
-          const portMatches = !filterForm.port || (baseInfo.port !== null && baseInfo.port !== undefined && String(baseInfo.port).includes(filterForm.port))
-          
-          console.log('Base info item:', baseInfo, 'hostMatches:', hostMatches, 'portMatches:', portMatches)
-          
-          if (hostMatches && portMatches) {
-            // 添加到结果前检查是否已存在相同的 host:port
-            if (!seenHostPorts.has(hostPortKey)) {
-              seenHostPorts.add(hostPortKey)
-              filteredData.push({
-                ...baseInfo,
-                node: node
-              })
-            } else {
-              // 如果已存在相同的 host:port，可以选择合并或跳过
-              // 这里我们只保留首次出现的，以避免重复显示
-              console.log(`Duplicate host:port ${hostPortKey} found, skipping`)
-            }
-          }
-        })
-      }
-    })
-    
-    // 分页处理
-    const start = (pagination.currentPage - 1) * pagination.pageSize
-    const end = start + pagination.pageSize
-    baseInfoList.value = filteredData.slice(start, end)
-    pagination.total = filteredData.length
+    const response = await baseInfoApi.getBaseInfoList(params)
+    baseInfoList.value = response.data.data || []
+    pagination.total = response.data.all_num || 0
     
   } catch (error) {
     console.error('获取基础信息列表失败:', error)

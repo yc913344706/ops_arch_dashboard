@@ -3,7 +3,7 @@ from apps.monitor.tasks import check_node_health, trigger_alert_notification
 from lib.time_tools import utc_obj_to_time_zone_str
 from lib.request_tool import pub_bool_check, pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
-from .models import Link, Node, NodeHealth, NodeConnection, Alert, SystemHealthStats, PushPlusConfig
+from .models import BaseInfo, Link, Node, NodeHealth, NodeConnection, Alert, SystemHealthStats, PushPlusConfig
 from lib.log import color_logger
 from apps.myAuth.token_utils import TokenManager
 from django.db.models import Q, Count, Case, When, IntegerField, Sum, F
@@ -1884,6 +1884,138 @@ class MonitorDashboardView(View):
             })
         
         return result
+
+
+class BaseInfoView(View):
+    """基础信息相关接口"""
+    
+    def get(self, request):
+        """获取基础信息列表"""
+        try:
+            body = pub_get_request_body(request)
+            
+            page = int(body.get('page', 1))
+            page_size = int(body.get('page_size', 20))
+            search = body.get('search', '')
+            host = body.get('host', '')
+            port = body.get('port')
+            is_healthy = body.get('is_healthy')
+            
+            # 查询所有基础信息服务信息
+            base_info_list = BaseInfo.objects.all()
+            
+            # 添加搜索功能
+            if search:
+                base_info_list = base_info_list.filter(
+                    Q(host__icontains=search)
+                )
+            
+            # 按主机地址过滤
+            if host:
+                base_info_list = base_info_list.filter(host__icontains=host)
+            
+            # 按端口过滤
+            if port is not None and port != '':
+                base_info_list = base_info_list.filter(port=port)
+            
+            # 按健康状态过滤
+            if is_healthy is not None and is_healthy != '':
+                if is_healthy in ['true', True, '1']:
+                    base_info_list = base_info_list.filter(is_healthy=True)
+                elif is_healthy in ['false', False, '0']:
+                    base_info_list = base_info_list.filter(is_healthy=False)
+                else:
+                    base_info_list = base_info_list.filter(is_healthy=None)
+            
+            # 分页查询
+            has_next, next_page, page_list, all_num, result = pub_paging_tool(page, base_info_list, page_size)
+            
+            # 格式化返回数据，包含使用该服务的所有节点信息
+            result_data = []
+            for base_info in result:
+                # 获取使用此基础信息的所有节点
+                node_associations = base_info.node_associations.select_related('node__link').all()
+                
+                nodes_info = []
+                for node_assoc in node_associations:
+                    nodes_info.append({
+                        'uuid': str(node_assoc.node.uuid),
+                        'name': node_assoc.node.name,
+                        'link': {
+                            'uuid': str(node_assoc.node.link.uuid),
+                            'name': node_assoc.node.link.name
+                        },
+                        'is_ping_disabled': node_assoc.is_ping_disabled  # 节点特定的配置
+                    })
+                
+                result_data.append({
+                    'uuid': str(base_info.uuid),
+                    'host': base_info.host,
+                    'port': base_info.port,
+                    'is_healthy': base_info.is_healthy,
+                    'is_ping_disabled': base_info.is_ping_disabled,  # 全局默认配置
+                    'remarks': base_info.remarks,
+                    'nodes': nodes_info,  # 使用此服务的所有节点
+                    'create_time': utc_obj_to_time_zone_str(base_info.create_time),
+                    'update_time': utc_obj_to_time_zone_str(base_info.update_time)
+                })
+            
+            return pub_success_response({
+                'has_next': has_next,
+                'next_page': next_page,
+                'all_num': all_num,
+                'data': result_data
+            })
+            
+        except Exception as e:
+            color_logger.error(f"获取基础信息列表失败: {e.args}")
+            return pub_error_response(f"获取基础信息列表失败: {e.args}")
+    
+    def put(self, request):
+        """更新基础信息服务信息"""
+        try:
+            body = pub_get_request_body(request)
+            
+            uuid = body.get('uuid')
+            assert uuid, 'uuid 不能为空'
+
+            base_info = BaseInfo.objects.filter(uuid=uuid).first()
+            assert base_info, '更新的基础信息不存在'
+
+            update_keys = ['is_ping_disabled', 'remarks']
+            update_dict = {key: value for key, value in body.items() if key in update_keys}
+            
+            for key, value in update_dict.items():
+                setattr(base_info, key, value)
+            base_info.save()
+
+            # 获取使用此基础信息的所有节点
+            node_associations = base_info.node_associations.select_related('node__link').all()
+            
+            nodes_info = []
+            for node_assoc in node_associations:
+                nodes_info.append({
+                    'uuid': str(node_assoc.node.uuid),
+                    'name': node_assoc.node.name,
+                    'link': {
+                        'uuid': str(node_assoc.node.link.uuid),
+                        'name': node_assoc.node.link.name
+                    },
+                    'is_ping_disabled': node_assoc.is_ping_disabled
+                })
+
+            return pub_success_response({
+                'uuid': str(base_info.uuid),
+                'host': base_info.host,
+                'port': base_info.port,
+                'is_healthy': base_info.is_healthy,
+                'is_ping_disabled': base_info.is_ping_disabled,
+                'remarks': base_info.remarks,
+                'nodes': nodes_info
+            })
+        except Exception as e:
+            color_logger.error(f"更新基础信息服务信息失败: {e.args}")
+            return pub_error_response(f"更新基础信息服务信息失败: {e.args}")
 
 
 class NodeHealthTSView(View):

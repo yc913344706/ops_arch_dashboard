@@ -9,6 +9,9 @@ urlpatterns = [
     
     # 节点相关接口
     path('nodes/', views.NodeView.as_view(), name='node-list'),
+
+    # baseinfo相关接口
+    path('baseinfo/', views.BaseInfoView.as_view(), name='baseinfo-list'),
     
     # 连接相关接口
     path('connections/', views.NodeConnectionView.as_view(), name='connection-list'),

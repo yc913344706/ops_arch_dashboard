@@ -42,7 +42,7 @@
       },
       "baseinfo": {
         "path": "/monitor/baseinfo/index",
-        "name": "MonitorNodes",
+        "name": "MonitorHosts",
         "meta": {
           "title": "主机管理",
           "showParent": true
