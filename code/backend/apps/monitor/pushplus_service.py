@@ -154,10 +154,42 @@ class PushPlusService:
                     }
 
             # 获取关联节点信息
-            from .models import Node
+            from .models import Node, Link, NodeBaseInfo, BaseInfo
             node = Node.objects.filter(uuid=alert.node_id).first()
             node_name = node.name if node else alert.node_id
+            
+            # 获取节点所属链路信息
+            link_name = ""
+            link_id = ""
+            if node and node.link:
+                link = node.link
+                link_name = link.name
+                link_id = str(link.uuid)
+            else:
+                # 尝试通过alert.node_id获取节点并查找链路
+                node_by_id = Node.objects.filter(uuid=alert.node_id).first()
+                if node_by_id and node_by_id.link:
+                    link = node_by_id.link
+                    link_name = link.name
+                    link_id = str(link.uuid)
 
+            # 获取节点的base_info详情
+            base_info_list = []
+            if node:
+                # 获取节点关联的所有base_info
+                node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
+                for node_base_info in node_base_info_items:
+                    base_info = node_base_info.base_info
+                    base_info_item = {
+                        'uuid': str(base_info.uuid),
+                        'host': base_info.host,
+                        'port': base_info.port,
+                        'is_ping_disabled': base_info.is_ping_disabled,
+                        'is_healthy': base_info.is_healthy,
+                        'remarks': base_info.remarks
+                    }
+                    base_info_list.append(base_info_item)
+            
             # 根据告警状态和消息类型决定标题和内容
             title_prefix = config.title_prefix or ""
             
@@ -175,7 +207,7 @@ class PushPlusService:
                 # 对于恢复通知，使用专门的格式
                 if config.template_type == 'alert':
                     # 在告警模板基础上添加恢复说明
-                    original_content = self._format_alert_content(alert, node_name, config.content_template)
+                    original_content = self._format_alert_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     if config.msg_type == 'html':
                         content = f"<strong>【问题已恢复】</strong>{line_break}{original_content}{line_break}{line_break}<em>恢复时间:</em> {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
                     elif config.msg_type == 'markdown':
@@ -184,7 +216,7 @@ class PushPlusService:
                         content = f"【问题已恢复】{line_break}{original_content}{line_break}{line_break}恢复时间: {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
                 elif config.template_type == 'notification':
                     # 通知模板的恢复格式
-                    original_content = self._format_notification_content(alert, node_name, config.content_template)
+                    original_content = self._format_notification_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     if config.msg_type == 'html':
                         content = f"<strong>【系统通知 - 问题恢复】</strong>{line_break}{original_content}{line_break}{line_break}<em>问题已解决，恢复正常运行</em>"
                     elif config.msg_type == 'markdown':
@@ -193,7 +225,7 @@ class PushPlusService:
                         content = f"【系统通知 - 问题恢复】{line_break}{original_content}{line_break}{line_break}问题已解决，恢复正常运行"
                 else:  # custom template
                     # 自定义模板的恢复格式
-                    original_content = self._format_custom_content(alert, node_name, config.content_template)
+                    original_content = self._format_custom_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     if config.msg_type == 'html':
                         content = f"<strong>【恢复通知】{alert.title} 已恢复</strong>{line_break}{original_content}{line_break}{line_break}<em>恢复时间:</em> {alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else ''}"
                     elif config.msg_type == 'markdown':
@@ -207,7 +239,7 @@ class PushPlusService:
                 # 根据配置的模板类型处理内容
                 if config.template_type == 'alert':
                     # 告警消息模板
-                    content = self._format_alert_content(alert, node_name, config.content_template)
+                    content = self._format_alert_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     # 对于HTML和Markdown，应用基本格式
                     if config.msg_type == 'html':
                         content = content.replace('\n', '<br/>')
@@ -216,7 +248,7 @@ class PushPlusService:
                         pass
                 elif config.template_type == 'notification':
                     # 通知消息模板
-                    content = self._format_notification_content(alert, node_name, config.content_template)
+                    content = self._format_notification_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     # 对于HTML和Markdown，应用基本格式
                     if config.msg_type == 'html':
                         content = content.replace('\n', '<br/>')
@@ -225,7 +257,7 @@ class PushPlusService:
                         pass
                 else:
                     # 自定义消息模板
-                    content = self._format_custom_content(alert, node_name, config.content_template)
+                    content = self._format_custom_content(alert, node_name, link_name, link_id, base_info_list, config.content_template)
                     # 对于HTML和Markdown，应用基本格式
                     if config.msg_type == 'html':
                         content = content.replace('\n', '<br/>')
@@ -252,34 +284,57 @@ class PushPlusService:
                 "error": f"发送告警消息异常: {str(e)}"
             }
 
-    def _format_alert_content(self, alert: Alert, node_name: str, template: str = "") -> str:
+    def _format_alert_content(self, alert: Alert, node_name: str, link_name: str = "", link_id: str = "", base_info_list: list = None, template: str = "") -> str:
         """
         格式化告警消息内容
         
         Args:
             alert: 告警对象
             node_name: 节点名称
+            link_name: 链路名称
+            link_id: 链路ID
+            base_info_list: 基础信息列表
             template: 内容模板
             
         Returns:
             str: 格式化后的内容
         """
+        if base_info_list is None:
+            base_info_list = []
+        
         # 默认告警模板
         if not template or template.strip() == "":
             template = """告警类型: {alert_type}
 告警子类型: {alert_subtype}
 节点名称: {node_name}
+所属链路: {link_name}
 严重程度: {severity}
 标题: {title}
 描述: {description}
 首次发生时间: {first_occurred}
-最后发生时间: {last_occurred}"""
+最后发生时间: {last_occurred}
+节点基础信息:
+{base_info_list_formatted}"""
+
+        # 格式化base_info_list为字符串
+        base_info_formatted = ""
+        if base_info_list:
+            for i, info in enumerate(base_info_list, 1):
+                base_info_formatted += f"  [{i}] 主机: {info.get('host', 'N/A')}, 端口: {info.get('port', 'N/A')}, " \
+                                      f"禁ping: {info.get('is_ping_disabled', 'N/A')}, 健康状态: {info.get('is_healthy', 'N/A')}, " \
+                                      f"备注: {info.get('remarks', 'N/A')}\n"
+            # 去掉最后一个换行符
+            base_info_formatted = base_info_formatted.rstrip('\n')
+        else:
+            base_info_formatted = "  无"
 
         # 变量替换
         content = template.format(
             alert_type=alert.alert_type,
             alert_subtype=alert.alert_subtype,
             node_name=node_name,
+            link_name=link_name,
+            link_id=link_id,
             severity=alert.severity,
             title=alert.title,
             description=alert.description,
@@ -287,60 +342,98 @@ class PushPlusService:
             last_occurred=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
             resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
             silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
-            status=alert.status
+            status=alert.status,
+            base_info_list_formatted=base_info_formatted
         )
 
         return content
 
-    def _format_notification_content(self, alert: Alert, node_name: str, template: str = "") -> str:
+    def _format_notification_content(self, alert: Alert, node_name: str, link_name: str = "", link_id: str = "", base_info_list: list = None, template: str = "") -> str:
         """
         格式化通知消息内容
         
         Args:
             alert: 告警对象
             node_name: 节点名称
+            link_name: 链路名称
+            link_id: 链路ID
+            base_info_list: 基础信息列表
             template: 内容模板
             
         Returns:
             str: 格式化后的内容
         """
+        if base_info_list is None:
+            base_info_list = []
+        
         # 默认通知模板
         if not template or template.strip() == "":
             template = """系统通知
 告警类型: {alert_type}
 节点: {node_name}
+所属链路: {link_name}
 严重程度: {severity}
 标题: {title}
-时间: {occurred_time}"""
+时间: {occurred_time}
+节点基础信息: {base_info_list_formatted}"""
+
+        # 格式化base_info_list为字符串
+        base_info_formatted = ""
+        if base_info_list:
+            for i, info in enumerate(base_info_list, 1):
+                base_info_formatted += f"[{i}]主机:{info.get('host', 'N/A')},端口:{info.get('port', 'N/A')},"
+            # 去掉最后一个逗号
+            base_info_formatted = base_info_formatted.rstrip(',')
+        else:
+            base_info_formatted = "无"
 
         content = template.format(
             alert_type=alert.alert_type,
             node_name=node_name,
+            link_name=link_name,
+            link_id=link_id,
             severity=alert.severity,
             title=alert.title,
             occurred_time=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
             resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
             silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
-            status=alert.status
+            status=alert.status,
+            base_info_list_formatted=base_info_formatted
         )
 
         return content
 
-    def _format_custom_content(self, alert: Alert, node_name: str, template: str) -> str:
+    def _format_custom_content(self, alert: Alert, node_name: str, link_name: str = "", link_id: str = "", base_info_list: list = None, template: str = "") -> str:
         """
         格式化自定义内容
         
         Args:
             alert: 告警对象
             node_name: 节点名称
+            link_name: 链路名称
+            link_id: 链路ID
+            base_info_list: 基础信息列表
             template: 内容模板
             
         Returns:
             str: 格式化后的内容
         """
+        if base_info_list is None:
+            base_info_list = []
+        
         # 如果模板为空，使用默认模板
         if not template or template.strip() == "":
             template = "{title}\n\n{description}"
+
+        # 格式化base_info_list为字符串
+        base_info_formatted = ""
+        if base_info_list:
+            for i, info in enumerate(base_info_list, 1):
+                base_info_formatted += f"[{i}]主机:{info.get('host', 'N/A')},端口:{info.get('port', 'N/A')},"
+            # 去掉最后一个逗号
+            base_info_formatted = base_info_formatted.rstrip(',')
+        else:
+            base_info_formatted = "无"
 
         # 替换常用变量
         content = template.format(
@@ -348,6 +441,8 @@ class PushPlusService:
             alert_subtype=alert.alert_subtype,
             node_id=alert.node_id,
             node_name=node_name,
+            link_name=link_name,
+            link_id=link_id,
             severity=alert.severity,
             title=alert.title,
             description=alert.description,
@@ -355,7 +450,8 @@ class PushPlusService:
             last_occurred=alert.last_occurred.strftime("%Y-%m-%d %H:%M:%S") if alert.last_occurred else "",
             resolved_at=alert.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if alert.resolved_at else "",
             silenced_at=alert.silenced_at.strftime("%Y-%m-%d %H:%M:%S") if alert.silenced_at else "",
-            status=alert.status
+            status=alert.status,
+            base_info_list_formatted=base_info_formatted
         )
 
         return content
