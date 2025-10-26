@@ -76,12 +76,27 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         color_logger.info(f"Start checking node health: {node_uuid}")
         node = Node.objects.get(uuid=node_uuid, is_active=True)
         
-        # 获取BaseInfo数据
-        from .models import BaseInfo
-        base_info_items = BaseInfo.objects.filter(node=node).select_related('node')
+        # 获取BaseInfo数据（通过NodeBaseInfo关联）
+        from .models import BaseInfo, NodeBaseInfo
+        node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
+        # 将node_base_info_items转换为与之前base_info_items相同的格式
+        base_info_items = []
+        for node_base_info in node_base_info_items:
+            base_info = node_base_info.base_info
+            # 创建一个类似原来BaseInfo对象的对象，包含节点特定的配置
+            class NodeSpecificBaseInfo:
+                def __init__(self, base_info, node_base_info):
+                    self.uuid = base_info.uuid
+                    self.host = base_info.host
+                    self.port = base_info.port
+                    self.is_ping_disabled = node_base_info.is_ping_disabled  # 使用节点特定配置
+                    self.base_info = base_info  # 保存对基础信息的引用
+                    self.node_base_info = node_base_info  # 保存对节点关联信息的引用
+            
+            base_info_items.append(NodeSpecificBaseInfo(base_info, node_base_info))
         
         # 统计基础信息数量
-        total_count = base_info_items.count()
+        total_count = len(base_info_items)
         
         # 记录节点基本信息
         color_logger.info(f"Node {node.name} (UUID: {node_uuid}) - BaseInfo count: {total_count}")
@@ -120,10 +135,11 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 node.save(update_fields=['healthy_status', 'last_check_time'])
                 
                 # 同步更新 BaseInfo 的健康状态（对于没有基础信息的情况，将所有相关基础信息设置为健康状态未知）
-                base_info_items = BaseInfo.objects.filter(node=node)
-                for base_info in base_info_items:
-                    base_info.is_healthy = None  # 未知状态
-                    base_info.save(update_fields=['is_healthy'])
+                from .models import NodeBaseInfo
+                node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
+                for node_base_info in node_base_info_items:
+                    node_base_info.base_info.is_healthy = None  # 未知状态
+                    node_base_info.base_info.save(update_fields=['is_healthy'])
                 
                 # 将健康记录写入InfluxDB（时序数据库）
                 try:
@@ -152,10 +168,11 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 node.save(update_fields=['healthy_status', 'last_check_time'])
                 
                 # 同步更新 BaseInfo 的健康状态（对于没有基础信息的情况，将所有相关基础信息设置为健康状态未知）
-                base_info_items = BaseInfo.objects.filter(node=node)
-                for base_info in base_info_items:
-                    base_info.is_healthy = None  # 未知状态
-                    base_info.save(update_fields=['is_healthy'])
+                from .models import NodeBaseInfo
+                node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
+                for node_base_info in node_base_info_items:
+                    node_base_info.base_info.is_healthy = None  # 未知状态
+                    node_base_info.base_info.save(update_fields=['is_healthy'])
                 
                 # 创建健康记录
                 probe_result = {
@@ -185,13 +202,13 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         hosts_to_ping = []
         host_port_pairs = []
         
-        for base_info in base_info_items:
+        for base_info_wrapper in base_info_items:
             # 检查是否禁ping
-            if not base_info.is_ping_disabled and base_info.host:
-                hosts_to_ping.append((base_info.host, str(base_info.uuid)))  # 使用base_info的uuid作为唯一标识
+            if not base_info_wrapper.is_ping_disabled and base_info_wrapper.host:
+                hosts_to_ping.append((base_info_wrapper.host, str(base_info_wrapper.uuid)))  # 使用base_info的uuid作为唯一标识
             
-            if base_info.host and base_info.port:
-                host_port_pairs.append((base_info.host, base_info.port, str(base_info.uuid)))
+            if base_info_wrapper.host and base_info_wrapper.port:
+                host_port_pairs.append((base_info_wrapper.host, base_info_wrapper.port, str(base_info_wrapper.uuid)))
         
         # 并发执行检测任务
         import asyncio
@@ -254,18 +271,18 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
         probe_count = 0
 
         # 处理BaseInfo数据
-        for base_info in base_info_items:
+        for base_info_wrapper in base_info_items:
             base_info_detail = {
-                'uuid': str(base_info.uuid),
-                'host': base_info.host,
-                'port': base_info.port,
-                'is_ping_disabled': base_info.is_ping_disabled,
+                'uuid': str(base_info_wrapper.uuid),
+                'host': base_info_wrapper.host,
+                'port': base_info_wrapper.port,
+                'is_ping_disabled': base_info_wrapper.is_ping_disabled,
                 'is_healthy': True  # 假设初始健康
             }
             
             # 检查ping结果
-            if not base_info.is_ping_disabled and base_info.host:
-                ping_result = ping_result_map.get(base_info.host)
+            if not base_info_wrapper.is_ping_disabled and base_info_wrapper.host:
+                ping_result = ping_result_map.get(base_info_wrapper.host)
                 if ping_result and not ping_result['is_healthy']:
                     base_info_detail['is_healthy'] = False
                 if ping_result and ping_result.get('response_time'):
@@ -273,8 +290,8 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                     probe_count += 1
             
             # 检查端口结果
-            if base_info.host and base_info.port:
-                port_key = f"{base_info.host}:{base_info.port}"
+            if base_info_wrapper.host and base_info_wrapper.port:
+                port_key = f"{base_info_wrapper.host}:{base_info_wrapper.port}"
                 port_result = port_result_map.get(port_key)
                 if port_result and not port_result['is_healthy']:
                     base_info_detail['is_healthy'] = False
@@ -321,13 +338,15 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
             node.last_check_time = timezone.now()
             node.save(update_fields=['healthy_status', 'last_check_time'])
             
-            # 同步更新 BaseInfo 的健康状态
-            for base_info in base_info_items:
+            # 同步更新 BaseInfo 的健康状态（全局基础信息）
+            from .models import BaseInfo
+            for base_info_wrapper in base_info_items:
                 # 获取对应的健康状态
-                base_info_detail = next((detail for detail in base_info_details if detail['uuid'] == str(base_info.uuid)), None)
+                base_info_detail = next((detail for detail in base_info_details if detail['uuid'] == str(base_info_wrapper.uuid)), None)
                 if base_info_detail:
-                    base_info.is_healthy = base_info_detail['is_healthy']
-                    base_info.save(update_fields=['is_healthy'])
+                    # 更新共享的基础信息服务信息的健康状态
+                    base_info_wrapper.base_info.is_healthy = base_info_detail['is_healthy']
+                    base_info_wrapper.base_info.save(update_fields=['is_healthy'])
 
         # 在probe_result中添加单点检测状态信息，供check_all_alerts使用
         single_point_status = 'normal'

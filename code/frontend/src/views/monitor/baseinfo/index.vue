@@ -68,6 +68,7 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="remarks" label="备注" show-overflow-tooltip />
         <el-table-column prop="node.name" label="所属节点" width="150" />
         <el-table-column prop="node.link.name" label="所属链路" width="150" />
         <el-table-column prop="create_time" label="创建时间" width="160" />
@@ -141,6 +142,8 @@ const fetchBaseInfoList = async () => {
     
     // 过滤并展开 base_info_list 数据
     let filteredData: any[] = []
+    let seenHostPorts = new Set() // 用于跟踪已处理的 host:port 组合
+    
     console.log('All nodes for baseinfo:', allNodes)
     allNodes.forEach(node => {
       const nodeMatches = !filterForm.nodeName || node.name.toLowerCase().includes(filterForm.nodeName.toLowerCase())
@@ -150,16 +153,25 @@ const fetchBaseInfoList = async () => {
         console.log('Processing node:', node.name, 'base_info_list:', node.base_info_list)
         const nodeBaseInfoList = node.base_info_list || []
         nodeBaseInfoList.forEach((baseInfo: any) => {
+          const hostPortKey = `${baseInfo.host}:${baseInfo.port || 'null'}`
           const hostMatches = !filterForm.host || (baseInfo.host && baseInfo.host.toLowerCase().includes(filterForm.host.toLowerCase()))
           const portMatches = !filterForm.port || (baseInfo.port !== null && baseInfo.port !== undefined && String(baseInfo.port).includes(filterForm.port))
           
           console.log('Base info item:', baseInfo, 'hostMatches:', hostMatches, 'portMatches:', portMatches)
           
           if (hostMatches && portMatches) {
-            filteredData.push({
-              ...baseInfo,
-              node: node
-            })
+            // 添加到结果前检查是否已存在相同的 host:port
+            if (!seenHostPorts.has(hostPortKey)) {
+              seenHostPorts.add(hostPortKey)
+              filteredData.push({
+                ...baseInfo,
+                node: node
+              })
+            } else {
+              // 如果已存在相同的 host:port，可以选择合并或跳过
+              // 这里我们只保留首次出现的，以避免重复显示
+              console.log(`Duplicate host:port ${hostPortKey} found, skipping`)
+            }
           }
         })
       }

@@ -22,7 +22,6 @@ ops_arch_dashboard/
 ├── etc/                            # 配置文件目录
 ├── lib/                            # 库文件目录
 ├── logs/                           # 日志目录
-├── persistent/                     # 持久化数据目录
 └── tools/                          # 工具目录
 ```
 

@@ -184,21 +184,21 @@ class LinkTopologyView(View):
             connections = NodeConnection.objects.filter(link=link, is_active=True)
 
             # 构建节点数据
-            from .models import BaseInfo
+            from .models import BaseInfo, NodeBaseInfo
             nodes_data = []
             for node in nodes:
-                # 优先使用 BaseInfo 表中存储的健康状态
-                base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
-                    'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
-                )
+                # 优先使用 BaseInfo 表中存储的健康状态（通过 NodeBaseInfo 关联）
+                node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
                 base_info_list = []
-                for item in base_info_items_with_status:
+                for node_base_info in node_base_info_items:
+                    base_info = node_base_info.base_info
                     base_info_item = {
-                        'uuid': str(item['uuid']), 
-                        'host': item['host'], 
-                        'port': item['port'], 
-                        'is_ping_disabled': item['is_ping_disabled'],
-                        'is_healthy': item['is_healthy']  # 直接使用 BaseInfo 表中的健康状态
+                        'uuid': str(base_info.uuid), 
+                        'host': base_info.host, 
+                        'port': base_info.port, 
+                        'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                        'is_healthy': base_info.is_healthy,  # 使用全局健康状态
+                        'remarks': base_info.remarks  # 新增备注字段
                     }
                     base_info_list.append(base_info_item)
                 
@@ -279,19 +279,19 @@ class NodeView(View):
                     key=f'node_check_duration_{node.uuid}'
                 ).first()
                 
-                # 优先使用 BaseInfo 表中存储的健康状态
-                from .models import BaseInfo
-                base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
-                    'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
-                )
+                # 优先使用 BaseInfo 表中存储的健康状态（通过 NodeBaseInfo 关联）
+                from .models import BaseInfo, NodeBaseInfo
+                node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
                 base_info_list = []
-                for item in base_info_items_with_status:
+                for node_base_info in node_base_info_items:
+                    base_info = node_base_info.base_info
                     base_info_item = {
-                        'uuid': str(item['uuid']), 
-                        'host': item['host'], 
-                        'port': item['port'], 
-                        'is_ping_disabled': item['is_ping_disabled'],
-                        'is_healthy': item['is_healthy']  # 直接使用 BaseInfo 表中的健康状态
+                        'uuid': str(base_info.uuid), 
+                        'host': base_info.host, 
+                        'port': base_info.port, 
+                        'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                        'is_healthy': base_info.is_healthy,  # 使用全局健康状态
+                        'remarks': base_info.remarks  # 新增备注字段
                     }
                     base_info_list.append(base_info_item)
                 
@@ -346,41 +346,59 @@ class NodeView(View):
             
             node = Node.objects.create(**create_dict)
             
-            # 如果提供了 base_info_list 参数，则创建BaseInfo记录
+            # 如果提供了 base_info_list 参数，则创建或关联BaseInfo记录
             base_info_list = body.get('base_info_list', [])
             if base_info_list:
-                from .models import BaseInfo
+                from .models import BaseInfo, NodeBaseInfo
                 for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
+                        remarks = base_info_item.get('remarks', '')
                         
-                        # 检查是否已经有其他节点配置了相同的 host:port
-                        existing_base_info = BaseInfo.objects.filter(host=host, port=port).first()
-                        if existing_base_info:
-                            color_logger.warning(f"BaseInfo host:port {host}:{port} already exists in node {existing_base_info.node.name}, consider consolidating configurations")
-                        
-                        # 创建BaseInfo记录
-                        BaseInfo.objects.create(
-                            node=node,
+                        # 检查是否已存在相同 host:port 的基础信息
+                        base_info, created = BaseInfo.objects.get_or_create(
                             host=host,
                             port=port,
-                            is_ping_disabled=is_ping_disabled,
-                            is_healthy=None  # 初始健康状态为未知
+                            defaults={
+                                'is_ping_disabled': is_ping_disabled,
+                                'is_healthy': None,  # 初始健康状态为未知
+                                'remarks': remarks
+                            }
+                        )
+                        
+                        if created:
+                            color_logger.info(f"Created new BaseInfo for {host}:{port}")
+                        else:
+                            color_logger.info(f"Reusing existing BaseInfo for {host}:{port}")
+                            # 如果基础信息已存在，但备注不同，可以考虑更新备注
+                            if remarks and not base_info.remarks:
+                                base_info.remarks = remarks
+                                base_info.save(update_fields=['remarks'])
+                        
+                        # 建立节点与基础信息的关联
+                        NodeBaseInfo.objects.get_or_create(
+                            node=node,
+                            base_info=base_info,
+                            defaults={
+                                'is_ping_disabled': is_ping_disabled
+                            }
                         )
             
             # 返回更新后的数据
-            from .models import BaseInfo
-            base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
+            from .models import BaseInfo, NodeBaseInfo
+            node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
             base_info_list = []
-            for item in base_info_items:
+            for node_base_info in node_base_info_items:
+                base_info = node_base_info.base_info
                 base_info_item = {
-                    'uuid': str(item['uuid']), 
-                    'host': item['host'], 
-                    'port': item['port'], 
-                    'is_ping_disabled': item['is_ping_disabled'],
-                    'is_healthy': item['is_healthy']  # 使用数据库中的健康状态
+                    'uuid': str(base_info.uuid), 
+                    'host': base_info.host, 
+                    'port': base_info.port, 
+                    'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                    'is_healthy': base_info.is_healthy,  # 使用全局健康状态
+                    'remarks': base_info.remarks  # 新增备注字段
                 }
                 base_info_list.append(base_info_item)
             
@@ -417,30 +435,46 @@ class NodeView(View):
             # 如果提供了 base_info_list 参数，则更新BaseInfo记录
             base_info_list = body.get('base_info_list', None)
             if base_info_list is not None:  # 如果提供了该参数（即使是空列表也表示要清空）
-                # 删除现有的BaseInfo记录
-                from .models import BaseInfo
-                BaseInfo.objects.filter(node=node).delete()
+                # 删除现有的节点基础信息关联
+                from .models import NodeBaseInfo
+                NodeBaseInfo.objects.filter(node=node).delete()
                 
-                # 创建新的BaseInfo记录
-                from .models import BaseInfo
+                # 创建或关联新的基础信息
+                from .models import BaseInfo, NodeBaseInfo
                 for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
+                        remarks = base_info_item.get('remarks', '')
                         
-                        # 检查是否已经有其他节点配置了相同的 host:port
-                        existing_base_info = BaseInfo.objects.filter(host=host, port=port).first()
-                        if existing_base_info and existing_base_info.node_id != node.uuid:
-                            color_logger.warning(f"BaseInfo host:port {host}:{port} already exists in node {existing_base_info.node.name}, consider consolidating configurations")
-                        
-                        # 创建BaseInfo记录
-                        BaseInfo.objects.create(
-                            node=node,
+                        # 检查或创建基础信息
+                        base_info, created = BaseInfo.objects.get_or_create(
                             host=host,
                             port=port,
-                            is_ping_disabled=is_ping_disabled,
-                            is_healthy=None  # 初始健康状态为未知
+                            defaults={
+                                'is_ping_disabled': is_ping_disabled,
+                                'is_healthy': None,  # 初始健康状态为未知
+                                'remarks': remarks
+                            }
+                        )
+                        
+                        if created:
+                            color_logger.info(f"Created new BaseInfo for {host}:{port}")
+                        else:
+                            color_logger.info(f"Reusing existing BaseInfo for {host}:{port}")
+                            # 如果基础信息已存在，但备注不同，可以考虑更新备注
+                            if remarks and not base_info.remarks:
+                                base_info.remarks = remarks
+                                base_info.save(update_fields=['remarks'])
+                        
+                        # 建立节点与基础信息的关联
+                        NodeBaseInfo.objects.get_or_create(
+                            node=node,
+                            base_info=base_info,
+                            defaults={
+                                'is_ping_disabled': is_ping_disabled
+                            }
                         )
             
             # 尝试触发健康检查任务，但即使失败也不影响API响应
@@ -451,18 +485,18 @@ class NodeView(View):
                 # 不中断主流程，只是记录错误
 
             # 返回更新后的数据
-            from .models import BaseInfo
-            base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
-                'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
-            )
+            from .models import BaseInfo, NodeBaseInfo
+            node_base_info_items = NodeBaseInfo.objects.filter(node=node).select_related('base_info')
             base_info_list = []
-            for item in base_info_items_with_status:
+            for node_base_info in node_base_info_items:
+                base_info = node_base_info.base_info
                 base_info_item = {
-                    'uuid': str(item['uuid']), 
-                    'host': item['host'], 
-                    'port': item['port'], 
-                    'is_ping_disabled': item['is_ping_disabled'],
-                    'is_healthy': item['is_healthy']  # 使用数据库中的健康状态
+                    'uuid': str(base_info.uuid), 
+                    'host': base_info.host, 
+                    'port': base_info.port, 
+                    'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                    'is_healthy': base_info.is_healthy,  # 使用全局健康状态
+                    'remarks': base_info.remarks  # 新增备注字段
                 }
                 base_info_list.append(base_info_item)
             

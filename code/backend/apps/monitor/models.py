@@ -156,38 +156,62 @@ class Node(BaseModel):
 
 class BaseInfo(BaseModel):
     """
-    基础信息模型 - 存储节点的主机和端口信息
+    基础信息模型 - 存储共享的服务信息（不与特定节点关联）
     """
-    node = models.ForeignKey(
-        Node,
-        on_delete=models.CASCADE,
-        related_name='base_info_items',
-        verbose_name='关联节点'
-    )
     host = models.CharField(max_length=255, verbose_name='主机地址')
     port = models.IntegerField(null=True, blank=True, verbose_name='端口')
     is_ping_disabled = models.BooleanField(default=False, verbose_name='是否禁ping')
     # 新增字段：健康状态
     is_healthy = models.BooleanField(null=True, blank=True, verbose_name='健康状态')
+    remarks = models.TextField(blank=True, null=True, verbose_name='备注')
 
     class Meta:
-        verbose_name = '基础信息'
+        verbose_name = '基础服务信息'
         verbose_name_plural = verbose_name
         ordering = ['-create_time']
-        # 确保在同一节点下，host+port的组合是唯一的
-        # 由于port可能为空，我们需要使用约束来处理这种情况
+        # 确保在整个系统中，host+port的组合是唯一的
         constraints = [
             models.UniqueConstraint(
                 fields=['host', 'port'],
-                name='unique_node_host_port'
+                name='unique_host_port_global'
             )
         ]
 
     def __str__(self):
         if self.port:
-            return f"{self.node.name} - {self.host}:{self.port}"
+            return f"{self.host}:{self.port}"
         else:
-            return f"{self.node.name} - {self.host}"
+            return f"{self.host}"
+
+
+class NodeBaseInfo(BaseModel):
+    """
+    节点基础信息关联表 - 关联节点和服务信息
+    """
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name='node_base_info_items',
+        verbose_name='关联节点'
+    )
+    base_info = models.ForeignKey(
+        BaseInfo,
+        on_delete=models.CASCADE,
+        related_name='node_associations',
+        verbose_name='服务信息'
+    )
+    # 节点特定的配置
+    is_ping_disabled = models.BooleanField(default=False, verbose_name='是否禁ping（节点特定）')
+    
+    class Meta:
+        verbose_name = '节点服务关联'
+        verbose_name_plural = verbose_name
+        ordering = ['-create_time']
+        # 确保一个节点不能重复关联同一个服务信息
+        unique_together = ['node', 'base_info']
+
+    def __str__(self):
+        return f"{self.node.name} -> {self.base_info}"
 
 
 class NodeConnection(BaseModel):
