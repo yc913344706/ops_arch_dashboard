@@ -92,6 +92,7 @@ const initGraph = async () => {
         { id: 'zoom-in', value: 'zoom-in' },
         { id: 'zoom-out', value: 'zoom-out' },
         { id: 'auto-fit', value: 'auto-fit' },
+        { id: 'reset', value: 'reset' },
       ],
       onClick: (value) => {
         // 处理按钮点击事件
@@ -102,6 +103,9 @@ const initGraph = async () => {
           graphInstance.zoomBy(0.8);
         } else if (value === 'auto-fit') {
           graphInstance.fitView();
+        } else if (value === 'reset') {
+          // 刷新页面
+          window.location.reload();
         }
       },
     },
