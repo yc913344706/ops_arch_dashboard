@@ -206,7 +206,7 @@ class Command(BaseCommand):
                         "/api/v1/monitor/links/": ["GET", "POST", "PUT", "DELETE"],
                         "/api/v1/monitor/link/topology/": ["GET"],
                         "/api/v1/monitor/nodes/": ["GET", "POST", "PUT", "DELETE"],
-                        "/api/v1/monitor/baseinfo/": ["GET"],
+                        "/api/v1/monitor/baseinfo/": ["GET", "PUT"],
                         "/api/v1/monitor/connections/": ["GET", "POST", "PUT", "DELETE"],
                         "/api/v1/monitor/alerts/": ["GET", "POST", "PUT", "DELETE"],
                         "/api/v1/monitor/alert/": ["GET", "PUT"],
