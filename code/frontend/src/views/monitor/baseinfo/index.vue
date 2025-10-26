@@ -68,7 +68,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remarks" label="备注" show-overflow-tooltip />
+        <el-table-column prop="remarks" label="备注" show-overflow-tooltip width="200" />
         <el-table-column label="关联节点" width="200">
           <template #default="scope">
             <div v-for="node in scope.row.nodes" :key="node.uuid" class="node-item">
@@ -88,17 +88,17 @@
           </template>
         </el-table-column>
         <el-table-column prop="create_time" label="创建时间" width="160" />
-        <!-- <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="120">
           <template #default="scope">
             <el-button 
               size="small" 
               type="primary" 
-              @click="goToNodeInEditor(scope.row.nodes[0]?.uuid)"
+              @click="editRemark(scope.row)"
             >
-              查看节点
+              修改备注
             </el-button>
           </template>
-        </el-table-column> -->
+        </el-table-column>
       </el-table>
       
       <div class="pagination">
@@ -113,6 +113,31 @@
         />
       </div>
     </el-card>
+    
+    <!-- 修改备注对话框 -->
+    <el-dialog 
+      v-model="showRemarkDialog" 
+      title="修改备注" 
+      width="500px"
+      :before-close="() => { showRemarkDialog = false }"
+    >
+      <el-form>
+        <el-form-item label="备注">
+          <el-input
+            v-model="remarkForm.remarks"
+            :rows="4"
+            type="textarea"
+            placeholder="请输入备注信息"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showRemarkDialog = false">取消</el-button>
+          <el-button type="primary" @click="saveRemark">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -125,6 +150,13 @@ import { useRouter } from 'vue-router'
 // 定义响应式数据
 const loading = ref(false)
 const router = useRouter()
+
+// 弹窗相关数据
+const showRemarkDialog = ref(false)
+const currentBaseInfo = ref<any>(null)
+const remarkForm = reactive({
+  remarks: ''
+})
 
 // 表格数据
 const baseInfoList = ref<any[]>([])
@@ -205,6 +237,37 @@ const getHealthStatusType = (is_healthy: boolean | null) => {
     return 'danger' // 不健康
   } else {
     return 'info' // 未知状态
+  }
+}
+
+// 编辑备注
+const editRemark = (row: any) => {
+  currentBaseInfo.value = { ...row }
+  remarkForm.remarks = row.remarks || ''
+  showRemarkDialog.value = true
+}
+
+// 保存备注
+const saveRemark = async () => {
+  if (!currentBaseInfo.value) return
+  
+  try {
+    await baseInfoApi.updateBaseInfo({
+      uuid: currentBaseInfo.value.uuid,
+      remarks: remarkForm.remarks
+    })
+    
+    // 更新本地数据
+    const index = baseInfoList.value.findIndex(item => item.uuid === currentBaseInfo.value.uuid)
+    if (index !== -1) {
+      baseInfoList.value[index].remarks = remarkForm.remarks
+    }
+    
+    showRemarkDialog.value = false
+    ElMessage.success('备注更新成功')
+  } catch (error) {
+    console.error('更新备注失败:', error)
+    ElMessage.error('更新备注失败')
   }
 }
 

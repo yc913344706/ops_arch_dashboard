@@ -134,7 +134,10 @@ export const dashboardApi = {
 // 基础信息相关API
 export const baseInfoApi = {
   // 获取基础信息列表
-  getBaseInfoList: (params?: any) => http.request('get', monitorApiMap.getBaseInfoList, { params })
+  getBaseInfoList: (params?: any) => http.request('get', monitorApiMap.getBaseInfoList, { params }),
+  
+  // 更新基础信息
+  updateBaseInfo: (data: any) => http.request('put', monitorApiMap.getBaseInfoList, { data }),
 }
 
 // 系统健康统计相关API
