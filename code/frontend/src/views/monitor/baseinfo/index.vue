@@ -48,7 +48,7 @@
       <el-table :data="baseInfoList" v-loading="loading">
         <el-table-column prop="host" label="主机地址" width="200" />
         <el-table-column prop="port" label="端口" width="100" />
-        <el-table-column prop="is_ping_disabled" label="禁Ping(默认)" width="100">
+        <el-table-column prop="is_ping_disabled" label="禁Ping" width="100">
           <template #default="scope">
             <el-tag 
               :type="scope.row.is_ping_disabled ? 'warning' : 'success'"
