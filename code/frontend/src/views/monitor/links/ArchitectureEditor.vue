@@ -59,14 +59,14 @@
                         v-model="info.host" 
                         placeholder="主机" 
                         size="small"
-                        style="width: 40%; margin-right: 5px;"
+                        style="width: 30%; margin-right: 5px;"
                       />
                       <el-input 
                         v-model="info.port" 
                         placeholder="端口" 
                         size="small"
                         type="number"
-                        style="width: 20%; margin-right: 5px;"
+                        style="width: 15%; margin-right: 5px;"
                       />
                       <el-checkbox 
                         v-model="info.is_ping_disabled" 
@@ -74,6 +74,61 @@
                       >
                         禁Ping
                       </el-checkbox>
+                      <el-tooltip 
+                        v-if="info.remarks"
+                        :content="info.remarks" 
+                        placement="top" 
+                        effect="light">
+                        <div class="remark-btn-wrapper" style="margin-right: 5px;">
+                          <el-popover
+                            placement="top"
+                            :width="300"
+                            trigger="click">
+                            <template #reference>
+                              <el-button size="small" type="info" :class="{ 'has-remarks': info.remarks }">
+                                备注
+                              </el-button>
+                            </template>
+                            <div>
+                              <el-input
+                                v-model="info.remarks"
+                                type="textarea"
+                                :rows="3"
+                                placeholder="请输入备注"
+                              />
+                              <div style="text-align: right; margin-top: 10px;">
+                                <el-button size="small" @click="updateBasicInfoRemark(info)">保存</el-button>
+                              </div>
+                            </div>
+                          </el-popover>
+                        </div>
+                      </el-tooltip>
+                      <div 
+                        v-else
+                        class="remark-btn-wrapper" 
+                        style="margin-right: 5px;">
+                        <el-popover
+                          placement="top"
+                          :width="300"
+                          trigger="click">
+                          <template #reference>
+                            <el-button size="small" type="info">
+                              备注
+                            </el-button>
+                          </template>
+                          <div>
+                            <el-input
+                              v-model="info.remarks"
+                              type="textarea"
+                              :rows="3"
+                              placeholder="请输入备注"
+                            />
+                            <div style="text-align: right; margin-top: 10px;">
+                              <el-button size="small" @click="updateBasicInfoRemark(info)">保存</el-button>
+                            </div>
+                          </div>
+                        </el-popover>
+                      </div>
                       <el-button @click="removeBasicInfo(index)" size="small" type="danger">删除</el-button>
                     </div>
                     <el-button @click="addBasicInfo" size="small">添加主机/端口</el-button>
@@ -205,14 +260,14 @@
               v-model="info.host" 
               placeholder="主机" 
               size="small"
-              style="width: 40%; margin-right: 5px;"
+              style="width: 30%; margin-right: 5px;"
             />
             <el-input 
               v-model="info.port" 
               placeholder="端口" 
               size="small"
               type="number"
-              style="width: 20%; margin-right: 5px;"
+              style="width: 15%; margin-right: 5px;"
             />
             <el-checkbox 
               v-model="info.is_ping_disabled" 
@@ -220,6 +275,55 @@
             >
               禁Ping
             </el-checkbox>
+            <el-tooltip 
+              v-if="info.remarks"
+              :content="info.remarks" 
+              placement="top" 
+              effect="light">
+              <div class="remark-btn-wrapper" style="margin-right: 5px;">
+                <el-popover
+                  placement="top"
+                  :width="300"
+                  trigger="click">
+                  <template #reference>
+                    <el-button size="small" type="info" :class="{ 'has-remarks': info.remarks }">
+                      备注
+                    </el-button>
+                  </template>
+                  <div>
+                    <el-input
+                      v-model="info.remarks"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="请输入备注"
+                    />
+                  </div>
+                </el-popover>
+              </div>
+            </el-tooltip>
+            <div 
+              v-else
+              class="remark-btn-wrapper" 
+              style="margin-right: 5px;">
+              <el-popover
+                placement="top"
+                :width="300"
+                trigger="click">
+                <template #reference>
+                  <el-button size="small" type="info">
+                    备注
+                  </el-button>
+                </template>
+                <div>
+                  <el-input
+                    v-model="info.remarks"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="请输入备注"
+                  />
+                </div>
+              </el-popover>
+            </div>
             <el-button @click="removeNewBasicInfo(index)" size="small" type="danger">删除</el-button>
           </div>
           <el-button @click="addNewBasicInfo" size="small">添加主机/端口</el-button>
@@ -238,8 +342,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { linkApi, nodeApi, nodeConnectionApi } from '@/api/monitor'
+import { linkApi, nodeApi, nodeConnectionApi, baseInfoApi } from '@/api/monitor'
 import { G6_NODE_HALF_WIDTH, G6_NODE_HALF_HEIGHT } from '@/constants/g6Constants'
+
 
 defineOptions({
   name: "ArchitectureEditor"
@@ -655,6 +760,26 @@ const updateConnectionTarget = async (connectionId: string, newTargetNodeId: str
   }
 }
 
+// 更新基础信息服务的备注
+const updateBasicInfoRemark = async (info: any) => {
+  if (!info.uuid) {
+    ElMessage.error('缺少基础信息服务的UUID')
+    return
+  }
+  
+  try {
+    await baseInfoApi.updateBaseInfo({
+      uuid: info.uuid,
+      remarks: info.remarks
+    })
+    
+    ElMessage.success('备注更新成功')
+  } catch (error) {
+    console.error('更新备注失败:', error)
+    ElMessage.error('更新备注失败')
+  }
+}
+
 // 组件挂载时获取架构图列表
 onMounted(() => {
   fetchDiagrams()
@@ -758,5 +883,25 @@ onMounted(() => {
 
 .dialog-footer {
   text-align: right;
+}
+
+.has-remarks {
+  position: relative;
+}
+
+.has-remarks::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #f56c6c;
+}
+
+.remark-btn-wrapper {
+  position: relative;
+  display: inline-block;
 }
 </style>
