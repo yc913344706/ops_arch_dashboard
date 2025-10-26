@@ -1,5 +1,6 @@
 from django.views import View
 from apps.monitor.tasks import check_node_health, trigger_alert_notification
+from apps.monitor.utils import format_node_data
 from lib.time_tools import utc_obj_to_time_zone_str
 from lib.request_tool import pub_bool_check, pub_get_request_body, pub_success_response, pub_error_response, get_request_param
 from lib.paginator_tool import pub_paging_tool
@@ -1946,14 +1947,7 @@ class BaseInfoView(View):
                 
                 nodes_info = []
                 for node_assoc in node_associations:
-                    nodes_info.append({
-                        'uuid': str(node_assoc.node.uuid),
-                        'name': node_assoc.node.name,
-                        'link': {
-                            'uuid': str(node_assoc.node.link.uuid),
-                            'name': node_assoc.node.link.name
-                        }
-                    })
+                    nodes_info.append(format_node_data(node_assoc.node))
                 
                 result_data.append({
                     'uuid': str(base_info.uuid),
