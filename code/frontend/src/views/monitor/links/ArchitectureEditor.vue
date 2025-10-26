@@ -698,7 +698,7 @@ onMounted(() => {
 }
 
 .operation-panel {
-  width: 400px;
+  width: 50%;
   background-color: #fff;
   border-left: 1px solid #e4e7ed;
   overflow-y: auto;

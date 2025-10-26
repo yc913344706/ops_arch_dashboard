@@ -89,7 +89,7 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                     self.uuid = base_info.uuid
                     self.host = base_info.host
                     self.port = base_info.port
-                    self.is_ping_disabled = node_base_info.is_ping_disabled  # 使用节点特定配置
+                    self.is_ping_disabled = base_info.is_ping_disabled  # 使用服务级配置
                     self.base_info = base_info  # 保存对基础信息的引用
                     self.node_base_info = node_base_info  # 保存对节点关联信息的引用
             

@@ -200,8 +200,6 @@ class NodeBaseInfo(BaseModel):
         related_name='node_associations',
         verbose_name='服务信息'
     )
-    # 节点特定的配置
-    is_ping_disabled = models.BooleanField(default=False, verbose_name='是否禁ping（节点特定）')
     
     class Meta:
         verbose_name = '节点服务关联'

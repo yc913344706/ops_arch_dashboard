@@ -196,7 +196,7 @@ class LinkTopologyView(View):
                         'uuid': str(base_info.uuid), 
                         'host': base_info.host, 
                         'port': base_info.port, 
-                        'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                        'is_ping_disabled': base_info.is_ping_disabled,  # 使用服务级配置
                         'is_healthy': base_info.is_healthy,  # 使用全局健康状态
                         'remarks': base_info.remarks  # 新增备注字段
                     }
@@ -289,7 +289,7 @@ class NodeView(View):
                         'uuid': str(base_info.uuid), 
                         'host': base_info.host, 
                         'port': base_info.port, 
-                        'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                        'is_ping_disabled': base_info.is_ping_disabled,  # 使用服务级配置
                         'is_healthy': base_info.is_healthy,  # 使用全局健康状态
                         'remarks': base_info.remarks  # 新增备注字段
                     }
@@ -357,7 +357,7 @@ class NodeView(View):
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
                         remarks = base_info_item.get('remarks', '')
                         
-                        # 检查是否已存在相同 host:port 的基础信息
+                        # 检查或创建基础信息
                         base_info, created = BaseInfo.objects.get_or_create(
                             host=host,
                             port=port,
@@ -372,18 +372,22 @@ class NodeView(View):
                             color_logger.info(f"Created new BaseInfo for {host}:{port}")
                         else:
                             color_logger.info(f"Reusing existing BaseInfo for {host}:{port}")
-                            # 如果基础信息已存在，但备注不同，可以考虑更新备注
+                            # 如果基础信息已存在，但传入了新的配置项，可以更新它们
+                            updated_fields = []
+                            if is_ping_disabled != base_info.is_ping_disabled:
+                                base_info.is_ping_disabled = is_ping_disabled
+                                updated_fields.append('is_ping_disabled')
                             if remarks and not base_info.remarks:
                                 base_info.remarks = remarks
-                                base_info.save(update_fields=['remarks'])
+                                updated_fields.append('remarks')
+                            
+                            if updated_fields:
+                                base_info.save(update_fields=updated_fields)
                         
-                        # 建立节点与基础信息的关联
+                        # 建立节点与基础信息的关联（只建立关联，不存储额外配置）
                         NodeBaseInfo.objects.get_or_create(
                             node=node,
-                            base_info=base_info,
-                            defaults={
-                                'is_ping_disabled': is_ping_disabled
-                            }
+                            base_info=base_info
                         )
             
             # 返回更新后的数据
@@ -396,7 +400,7 @@ class NodeView(View):
                     'uuid': str(base_info.uuid), 
                     'host': base_info.host, 
                     'port': base_info.port, 
-                    'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                    'is_ping_disabled': False,  # 使用节点特定配置
                     'is_healthy': base_info.is_healthy,  # 使用全局健康状态
                     'remarks': base_info.remarks  # 新增备注字段
                 }
@@ -463,18 +467,22 @@ class NodeView(View):
                             color_logger.info(f"Created new BaseInfo for {host}:{port}")
                         else:
                             color_logger.info(f"Reusing existing BaseInfo for {host}:{port}")
-                            # 如果基础信息已存在，但备注不同，可以考虑更新备注
+                            # 如果基础信息已存在，但传入了新的配置项，可以更新它们
+                            updated_fields = []
+                            if is_ping_disabled != base_info.is_ping_disabled:
+                                base_info.is_ping_disabled = is_ping_disabled
+                                updated_fields.append('is_ping_disabled')
                             if remarks and not base_info.remarks:
                                 base_info.remarks = remarks
-                                base_info.save(update_fields=['remarks'])
+                                updated_fields.append('remarks')
+                            
+                            if updated_fields:
+                                base_info.save(update_fields=updated_fields)
                         
-                        # 建立节点与基础信息的关联
+                        # 建立节点与基础信息的关联（只建立关联，不存储额外配置）
                         NodeBaseInfo.objects.get_or_create(
                             node=node,
-                            base_info=base_info,
-                            defaults={
-                                'is_ping_disabled': is_ping_disabled
-                            }
+                            base_info=base_info
                         )
             
             # 尝试触发健康检查任务，但即使失败也不影响API响应
@@ -494,7 +502,7 @@ class NodeView(View):
                     'uuid': str(base_info.uuid), 
                     'host': base_info.host, 
                     'port': base_info.port, 
-                    'is_ping_disabled': node_base_info.is_ping_disabled,  # 使用节点特定配置
+                    'is_ping_disabled': base_info.is_ping_disabled,  # 使用服务级配置
                     'is_healthy': base_info.is_healthy,  # 使用全局健康状态
                     'remarks': base_info.remarks  # 新增备注字段
                 }
@@ -1944,8 +1952,7 @@ class BaseInfoView(View):
                         'link': {
                             'uuid': str(node_assoc.node.link.uuid),
                             'name': node_assoc.node.link.name
-                        },
-                        'is_ping_disabled': node_assoc.is_ping_disabled  # 节点特定的配置
+                        }
                     })
                 
                 result_data.append({
@@ -2000,8 +2007,7 @@ class BaseInfoView(View):
                     'link': {
                         'uuid': str(node_assoc.node.link.uuid),
                         'name': node_assoc.node.link.name
-                    },
-                    'is_ping_disabled': node_assoc.is_ping_disabled
+                    }
                 })
 
             return pub_success_response({
