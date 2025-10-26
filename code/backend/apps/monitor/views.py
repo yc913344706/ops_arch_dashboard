@@ -184,48 +184,23 @@ class LinkTopologyView(View):
             connections = NodeConnection.objects.filter(link=link, is_active=True)
 
             # 构建节点数据
-            from .models import BaseInfo, NodeHealth
+            from .models import BaseInfo
             nodes_data = []
             for node in nodes:
-                # 获取BaseInfo数据
-                base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-                
-                # 获取最近的健康检查记录以获取is_healthy状态
-                latest_health = NodeHealth.objects.filter(node=node).order_by('-create_time').first()
-                
+                # 优先使用 BaseInfo 表中存储的健康状态
+                base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
+                    'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
+                )
                 base_info_list = []
-                if latest_health and latest_health.probe_result and 'base_info_details' in latest_health.probe_result:
-                    # 使用健康检查结果中的详细信息
-                    base_info_details = latest_health.probe_result['base_info_details']
-                    for item in base_info_items:
-                        base_info_item = {
-                            'uuid': str(item['uuid']), 
-                            'host': item['host'], 
-                            'port': item['port'], 
-                            'is_ping_disabled': item['is_ping_disabled']
-                        }
-                        # 尝试从健康检查结果中找到对应的健康状态
-                        matching_detail = None
-                        for detail in base_info_details:
-                            if detail.get('host') == item['host'] and detail.get('port') == item['port']:
-                                matching_detail = detail
-                                break
-                        if matching_detail and 'is_healthy' in matching_detail:
-                            base_info_item['is_healthy'] = matching_detail['is_healthy']
-                        else:
-                            base_info_item['is_healthy'] = None
-                        base_info_list.append(base_info_item)
-                else:
-                    # 如果没有健康检查结果，则只添加基本信息
-                    for item in base_info_items:
-                        base_info_item = {
-                            'uuid': str(item['uuid']), 
-                            'host': item['host'], 
-                            'port': item['port'], 
-                            'is_ping_disabled': item['is_ping_disabled'],
-                            'is_healthy': None  # 默认为None
-                        }
-                        base_info_list.append(base_info_item)
+                for item in base_info_items_with_status:
+                    base_info_item = {
+                        'uuid': str(item['uuid']), 
+                        'host': item['host'], 
+                        'port': item['port'], 
+                        'is_ping_disabled': item['is_ping_disabled'],
+                        'is_healthy': item['is_healthy']  # 直接使用 BaseInfo 表中的健康状态
+                    }
+                    base_info_list.append(base_info_item)
                 
                 nodes_data.append({
                     'uuid': str(node.uuid),
@@ -304,46 +279,21 @@ class NodeView(View):
                     key=f'node_check_duration_{node.uuid}'
                 ).first()
                 
-                # 获取BaseInfo数据
-                from .models import BaseInfo, NodeHealth
-                base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
-                
-                # 获取最近的健康检查记录以获取is_healthy状态
-                latest_health = NodeHealth.objects.filter(node=node).order_by('-create_time').first()
-                
+                # 优先使用 BaseInfo 表中存储的健康状态
+                from .models import BaseInfo
+                base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
+                    'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
+                )
                 base_info_list = []
-                if latest_health and latest_health.probe_result and 'base_info_details' in latest_health.probe_result:
-                    # 使用健康检查结果中的详细信息
-                    base_info_details = latest_health.probe_result['base_info_details']
-                    for item in base_info_items:
-                        base_info_item = {
-                            'uuid': str(item['uuid']), 
-                            'host': item['host'], 
-                            'port': item['port'], 
-                            'is_ping_disabled': item['is_ping_disabled']
-                        }
-                        # 尝试从健康检查结果中找到对应的健康状态
-                        matching_detail = None
-                        for detail in base_info_details:
-                            if detail.get('host') == item['host'] and detail.get('port') == item['port']:
-                                matching_detail = detail
-                                break
-                        if matching_detail and 'is_healthy' in matching_detail:
-                            base_info_item['is_healthy'] = matching_detail['is_healthy']
-                        else:
-                            base_info_item['is_healthy'] = None
-                        base_info_list.append(base_info_item)
-                else:
-                    # 如果没有健康检查结果，则只添加基本信息
-                    for item in base_info_items:
-                        base_info_item = {
-                            'uuid': str(item['uuid']), 
-                            'host': item['host'], 
-                            'port': item['port'], 
-                            'is_ping_disabled': item['is_ping_disabled'],
-                            'is_healthy': None  # 默认为None
-                        }
-                        base_info_list.append(base_info_item)
+                for item in base_info_items_with_status:
+                    base_info_item = {
+                        'uuid': str(item['uuid']), 
+                        'host': item['host'], 
+                        'port': item['port'], 
+                        'is_ping_disabled': item['is_ping_disabled'],
+                        'is_healthy': item['is_healthy']  # 直接使用 BaseInfo 表中的健康状态
+                    }
+                    base_info_list.append(base_info_item)
                 
                 result_data.append({
                     'uuid': str(node.uuid),
@@ -399,19 +349,25 @@ class NodeView(View):
             # 如果提供了 base_info_list 参数，则创建BaseInfo记录
             base_info_list = body.get('base_info_list', [])
             if base_info_list:
+                from .models import BaseInfo
                 for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
                         
+                        # 检查是否已经有其他节点配置了相同的 host:port
+                        existing_base_info = BaseInfo.objects.filter(host=host, port=port).first()
+                        if existing_base_info:
+                            color_logger.warning(f"BaseInfo host:port {host}:{port} already exists in node {existing_base_info.node.name}, consider consolidating configurations")
+                        
                         # 创建BaseInfo记录
-                        from .models import BaseInfo
                         BaseInfo.objects.create(
                             node=node,
                             host=host,
                             port=port,
-                            is_ping_disabled=is_ping_disabled
+                            is_ping_disabled=is_ping_disabled,
+                            is_healthy=None  # 初始健康状态为未知
                         )
             
             # 返回更新后的数据
@@ -424,7 +380,7 @@ class NodeView(View):
                     'host': item['host'], 
                     'port': item['port'], 
                     'is_ping_disabled': item['is_ping_disabled'],
-                    'is_healthy': None  # 新创建的节点基础信息没有健康状态
+                    'is_healthy': item['is_healthy']  # 使用数据库中的健康状态
                 }
                 base_info_list.append(base_info_item)
             
@@ -466,18 +422,25 @@ class NodeView(View):
                 BaseInfo.objects.filter(node=node).delete()
                 
                 # 创建新的BaseInfo记录
+                from .models import BaseInfo
                 for base_info_item in base_info_list:
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
                         
+                        # 检查是否已经有其他节点配置了相同的 host:port
+                        existing_base_info = BaseInfo.objects.filter(host=host, port=port).first()
+                        if existing_base_info and existing_base_info.node_id != node.uuid:
+                            color_logger.warning(f"BaseInfo host:port {host}:{port} already exists in node {existing_base_info.node.name}, consider consolidating configurations")
+                        
                         # 创建BaseInfo记录
                         BaseInfo.objects.create(
                             node=node,
                             host=host,
                             port=port,
-                            is_ping_disabled=is_ping_disabled
+                            is_ping_disabled=is_ping_disabled,
+                            is_healthy=None  # 初始健康状态为未知
                         )
             
             # 尝试触发健康检查任务，但即使失败也不影响API响应
@@ -489,15 +452,17 @@ class NodeView(View):
 
             # 返回更新后的数据
             from .models import BaseInfo
-            base_info_items = BaseInfo.objects.filter(node=node).values('uuid', 'host', 'port', 'is_ping_disabled', 'create_time', 'update_time')
+            base_info_items_with_status = BaseInfo.objects.filter(node=node).values(
+                'uuid', 'host', 'port', 'is_ping_disabled', 'is_healthy'
+            )
             base_info_list = []
-            for item in base_info_items:
+            for item in base_info_items_with_status:
                 base_info_item = {
                     'uuid': str(item['uuid']), 
                     'host': item['host'], 
                     'port': item['port'], 
                     'is_ping_disabled': item['is_ping_disabled'],
-                    'is_healthy': None  # 更新后需要重新进行健康检查以获取状态
+                    'is_healthy': item['is_healthy']  # 使用数据库中的健康状态
                 }
                 base_info_list.append(base_info_item)
             

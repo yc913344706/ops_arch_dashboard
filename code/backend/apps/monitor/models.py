@@ -167,6 +167,8 @@ class BaseInfo(BaseModel):
     host = models.CharField(max_length=255, verbose_name='主机地址')
     port = models.IntegerField(null=True, blank=True, verbose_name='端口')
     is_ping_disabled = models.BooleanField(default=False, verbose_name='是否禁ping')
+    # 新增字段：健康状态
+    is_healthy = models.BooleanField(null=True, blank=True, verbose_name='健康状态')
 
     class Meta:
         verbose_name = '基础信息'

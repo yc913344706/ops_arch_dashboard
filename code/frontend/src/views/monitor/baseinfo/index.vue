@@ -58,6 +58,16 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="is_healthy" label="健康状态" width="120">
+          <template #default="scope">
+            <el-tag 
+              :type="getHealthStatusType(scope.row.is_healthy)"
+              size="small"
+            >
+              {{ getHealthStatusText(scope.row.is_healthy) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="node.name" label="所属节点" width="150" />
         <el-table-column prop="node.link.name" label="所属链路" width="150" />
         <el-table-column prop="create_time" label="创建时间" width="160" />
@@ -196,6 +206,28 @@ const goToNodeInEditor = (nodeId: string) => {
   // 简单地跳转到架构图页面，实际实现需要根据具体路由设计
   router.push({ path: '/monitor/links' })
   ElMessage.info('请在架构图页面中搜索该节点')
+}
+
+// 获取健康状态类型
+const getHealthStatusType = (is_healthy: boolean | null) => {
+  if (is_healthy === true) {
+    return 'success' // 健康
+  } else if (is_healthy === false) {
+    return 'danger' // 不健康
+  } else {
+    return 'info' // 未知状态
+  }
+}
+
+// 获取健康状态文本
+const getHealthStatusText = (is_healthy: boolean | null) => {
+  if (is_healthy === true) {
+    return '健康'
+  } else if (is_healthy === false) {
+    return '异常'
+  } else {
+    return '未知'
+  }
 }
 
 // 页面挂载时获取数据

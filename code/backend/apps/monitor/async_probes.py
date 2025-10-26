@@ -15,6 +15,14 @@ class AsyncProbeManager:
     async def ping_async(self, host: str) -> Dict[str, Any]:
         """
         异步ping检测
+
+        Return: 
+        - {
+            'host': 主机地址,
+            'is_healthy': 是否健康,
+            'response_time': 响应时间(毫秒),
+            'error_message': 错误信息
+        }
         """
         try:
             # 使用系统ping命令，更可靠
@@ -60,6 +68,15 @@ class AsyncProbeManager:
     async def port_check_async(self, host: str, port: int) -> Dict[str, Any]:
         """
         异步端口检测
+
+        Return: 
+        - {
+            'host': 主机地址,
+            'port': 端口号,
+            'is_healthy': 是否健康,
+            'response_time': 响应时间(毫秒),
+            'error_message': 错误信息
+        }
         """
         try:
             start_time = asyncio.get_event_loop().time()

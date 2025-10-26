@@ -119,6 +119,12 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 node.last_check_time = timezone.now()
                 node.save(update_fields=['healthy_status', 'last_check_time'])
                 
+                # 同步更新 BaseInfo 的健康状态（对于没有基础信息的情况，将所有相关基础信息设置为健康状态未知）
+                base_info_items = BaseInfo.objects.filter(node=node)
+                for base_info in base_info_items:
+                    base_info.is_healthy = None  # 未知状态
+                    base_info.save(update_fields=['is_healthy'])
+                
                 # 将健康记录写入InfluxDB（时序数据库）
                 try:
                     influxdb_manager = InfluxDBManager()
@@ -144,6 +150,12 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
                 node.healthy_status = 'unknown'
                 node.last_check_time = timezone.now()
                 node.save(update_fields=['healthy_status', 'last_check_time'])
+                
+                # 同步更新 BaseInfo 的健康状态（对于没有基础信息的情况，将所有相关基础信息设置为健康状态未知）
+                base_info_items = BaseInfo.objects.filter(node=node)
+                for base_info in base_info_items:
+                    base_info.is_healthy = None  # 未知状态
+                    base_info.save(update_fields=['is_healthy'])
                 
                 # 创建健康记录
                 probe_result = {
@@ -308,6 +320,14 @@ def check_node_health(node_uuid, parent_task_lock_key=None, task_uuid=None):
             node.healthy_status = healthy_status
             node.last_check_time = timezone.now()
             node.save(update_fields=['healthy_status', 'last_check_time'])
+            
+            # 同步更新 BaseInfo 的健康状态
+            for base_info in base_info_items:
+                # 获取对应的健康状态
+                base_info_detail = next((detail for detail in base_info_details if detail['uuid'] == str(base_info.uuid)), None)
+                if base_info_detail:
+                    base_info.is_healthy = base_info_detail['is_healthy']
+                    base_info.save(update_fields=['is_healthy'])
 
         # 在probe_result中添加单点检测状态信息，供check_all_alerts使用
         single_point_status = 'normal'
