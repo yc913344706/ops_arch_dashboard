@@ -87,7 +87,8 @@
                         v-if="info.remarks"
                         :content="info.remarks" 
                         placement="top" 
-                        effect="light">
+                        effect="light"
+                        :popper-style="{ 'max-width': '20vw', 'word-break': 'break-word', 'max-height': '20vh', 'overflow-y': 'auto' }">
                         <div class="remark-btn-wrapper" style="margin-right: 5px;">
                           <el-popover
                             placement="top"
@@ -98,12 +99,13 @@
                                 备注
                               </el-button>
                             </template>
-                            <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop>
+                            <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop class="popover-content-wrapper">
                               <el-input
                                 :model-value="info._temp_remarks !== undefined ? info._temp_remarks : info.remarks"
                                 @update:model-value="updateRemarkValue(info, $event)"
                                 type="textarea"
                                 :rows="3"
+                                :autosize="{ minRows: 3, maxRows: 6 }"
                                 placeholder="请输入备注"
                               />
                               <div style="text-align: right; margin-top: 10px;">
@@ -126,12 +128,13 @@
                               备注
                             </el-button>
                           </template>
-                          <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop>
+                          <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop class="popover-content-wrapper">
                             <el-input
                               :model-value="info._temp_remarks !== undefined ? info._temp_remarks : info.remarks"
                               @update:model-value="updateRemarkValue(info, $event)"
                               type="textarea"
                               :rows="3"
+                              :autosize="{ minRows: 3, maxRows: 6 }"
                               placeholder="请输入备注"
                             />
                             <div style="text-align: right; margin-top: 10px;">
