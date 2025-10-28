@@ -30,7 +30,7 @@ class BaseModel(models.Model):
         """
         覆盖 delete 方法，实现软删除
         """
-        color_logger.debug(f"删除模型: {self.__class__.__name__} {self.uuid}")
+        color_logger.debug(f"软删除模型: {self.__class__.__name__} {self.uuid}")
         self.is_del = True
         self.save()
     
@@ -38,7 +38,7 @@ class BaseModel(models.Model):
         """
         硬删除
         """
-        color_logger.debug(f"删除模型: {self.__class__.__name__} {self.uuid}")
+        color_logger.debug(f"硬删除模型: {self.__class__.__name__} {self.uuid}")
         self.delete()
 
 
