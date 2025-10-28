@@ -107,7 +107,7 @@
                                 placeholder="请输入备注"
                               />
                               <div style="text-align: right; margin-top: 10px;">
-                                <el-button size="small" @click="updateBasicInfoRemark(info)">保存</el-button>
+                                <el-button size="small" @click="updateBasicInfoRemark($event, info)">保存</el-button>
                               </div>
                             </div>
                           </el-popover>
@@ -135,7 +135,7 @@
                               placeholder="请输入备注"
                             />
                             <div style="text-align: right; margin-top: 10px;">
-                              <el-button size="small" @click="updateBasicInfoRemark(info)">保存</el-button>
+                              <el-button size="small" @click="updateBasicInfoRemark($event, info)">保存</el-button>
                             </div>
                           </div>
                         </el-popover>
@@ -790,8 +790,16 @@ const updateRemarkValue = (info: any, value: string) => {
   info._temp_remarks = value  // 使用临时字段保存修改的值
 }
 
+const setPopoverRef = (el: any, key: string) => {
+  if (el) {
+    popoverRefs.value.set(key, el)
+  } else {
+    popoverRefs.value.delete(key)
+  }
+}
+
 // 更新基础信息服务的备注
-const updateBasicInfoRemark = async (info: any) => {
+const updateBasicInfoRemark = async (event: Event, info: any) => {
   if (!info.uuid) {
     ElMessage.error('缺少基础信息服务的UUID')
     return
@@ -811,6 +819,12 @@ const updateBasicInfoRemark = async (info: any) => {
     delete info._temp_remarks
     
     ElMessage.success('备注更新成功')
+    
+    // 保存成功后，通过触发一次外部点击来关闭popover
+    setTimeout(() => {
+      // 通过点击文档主体来关闭当前打开的popover
+      document.body.click();
+    }, 100);
   } catch (error) {
     console.error('更新备注失败:', error)
     ElMessage.error('更新备注失败')
