@@ -39,7 +39,7 @@ class BaseModel(models.Model):
         硬删除
         """
         color_logger.debug(f"硬删除模型: {self.__class__.__name__} {self.uuid}")
-        self.delete()
+        super().delete()
 
 
 class BaseTypeTree(BaseModel):
