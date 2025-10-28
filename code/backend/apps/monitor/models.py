@@ -144,6 +144,7 @@ class Node(BaseModel):
         verbose_name='健康状态'
     )
     last_check_time = models.DateTimeField(null=True, blank=True, verbose_name='最后检查时间')
+    remarks = models.TextField(blank=True, null=True, verbose_name='备注')
 
     class Meta:
         verbose_name = '节点'

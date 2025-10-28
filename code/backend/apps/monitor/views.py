@@ -210,7 +210,8 @@ class LinkTopologyView(View):
                     'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
-                    'create_time': node.create_time.isoformat() if node.create_time else None
+                    'create_time': node.create_time.isoformat() if node.create_time else None,
+                    'remarks': node.remarks
                 })
 
             # 构建连接数据
@@ -308,6 +309,7 @@ class NodeView(View):
                     'healthy_status': node.healthy_status,
                     'position_x': node.position_x,
                     'position_y': node.position_y,
+                    'remarks': node.remarks,  # 新增备注字段
                     'create_time': utc_obj_to_time_zone_str(node.create_time),
                     'update_time': utc_obj_to_time_zone_str(node.update_time),
                     'last_check_time': utc_obj_to_time_zone_str(node.last_check_time) if node.last_check_time else None,
@@ -331,7 +333,7 @@ class NodeView(View):
         try:
             body = pub_get_request_body(request)
             
-            create_keys = ['name', 'link', 'is_active', 'position_x', 'position_y']
+            create_keys = ['name', 'link', 'is_active', 'position_x', 'position_y', 'remarks']
             create_dict = {key: value for key, value in body.items() if key in create_keys}
             
             # 设置默认值
@@ -412,7 +414,8 @@ class NodeView(View):
                 'name': node.name,
                 'base_info_list': base_info_list,
                 'link': str(node.link.uuid),
-                'is_active': node.is_active
+                'is_active': node.is_active,
+                'remarks': node.remarks  # 新增备注字段
             })
         except Exception as e:
             color_logger.error(f"创建节点失败: {e.args}")
@@ -430,7 +433,7 @@ class NodeView(View):
             node = Node.objects.filter(uuid=uuid).first()
             assert node, '更新的节点不存在'
 
-            update_keys = ['name', 'is_active', 'position_x', 'position_y']
+            update_keys = ['name', 'is_active', 'position_x', 'position_y', 'remarks']
             update_dict = {key: value for key, value in body.items() if key in update_keys}
             
             for key, value in update_dict.items():
@@ -515,7 +518,8 @@ class NodeView(View):
                 'uuid': str(node.uuid),
                 'name': node.name,
                 'base_info_list': base_info_list,
-                'is_active': node.is_active
+                'is_active': node.is_active,
+                'remarks': node.remarks  # 新增备注字段
             })
         except Exception as e:
             color_logger.error(f"更新节点失败: {e.args}", exc_info=True)

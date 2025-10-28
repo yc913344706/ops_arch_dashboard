@@ -88,7 +88,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="create_time" label="创建时间" width="160" />
-        <el-table-column label="操作" width="120">
+        <!-- <el-table-column label="操作" width="120">
           <template #default="scope">
             <el-button 
               size="small" 
@@ -98,7 +98,7 @@
               修改备注
             </el-button>
           </template>
-        </el-table-column>
+        </el-table-column> -->
       </el-table>
       
       <div class="pagination">

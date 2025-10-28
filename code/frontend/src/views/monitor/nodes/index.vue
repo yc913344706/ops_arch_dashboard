@@ -38,6 +38,7 @@
       
       <el-table :data="nodes" v-loading="loading">
         <el-table-column prop="name" label="节点名称" width="200" />
+        <el-table-column prop="remarks" label="备注" width="200" show-overflow-tooltip />
         <el-table-column label="主机信息" width="350">
           <template #default="scope">
             <div v-for="(info, index) in getBasicInfoList(scope.row)" :key="index" class="host-info">
@@ -113,6 +114,7 @@
       <div v-if="selectedNode" class="node-detail-content">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="节点名称">{{ selectedNode.name }}</el-descriptions-item>
+          <el-descriptions-item label="节点备注">{{ selectedNode.remarks || '-' }}</el-descriptions-item>
           <el-descriptions-item label="所属链路">{{ selectedNode.link.name }}</el-descriptions-item>
           <el-descriptions-item label="健康状态">
             <el-tag 

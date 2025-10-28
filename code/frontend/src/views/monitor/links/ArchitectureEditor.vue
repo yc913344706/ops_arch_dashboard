@@ -43,6 +43,15 @@
                     <el-input v-model="selectedNode.name" />
                   </el-form-item>
                   
+                  <el-form-item label="备注">
+                    <el-input 
+                      v-model="selectedNode.remarks" 
+                      type="textarea" 
+                      :rows="3"
+                      placeholder="请输入节点备注" 
+                    />
+                  </el-form-item>
+                  
                   <el-form-item label="服务列表">
                     <div v-for="(info, index) in getBasicInfoList(selectedNode)" :key="index" class="basic-info-item">
                       <el-tag 
@@ -242,6 +251,15 @@
       <el-form :model="newNodeForm" label-width="80px">
         <el-form-item label="节点名称" required>
           <el-input v-model="newNodeForm.name" placeholder="请输入节点名称" />
+        </el-form-item>
+        
+        <el-form-item label="节点备注">
+          <el-input 
+            v-model="newNodeForm.remarks" 
+            type="textarea" 
+            :rows="3"
+            placeholder="请输入节点备注" 
+          />
         </el-form-item>
         
         <el-form-item label="服务列表">
@@ -494,6 +512,7 @@ const createNewNode = () => {
 const resetNewNodeForm = () => {
   newNodeForm.value = {
     name: '',
+    remarks: '',
     base_info_list: [{ is_healthy: null, is_ping_disabled: false }]
   }
 }
@@ -535,7 +554,8 @@ const confirmCreateNode = async () => {
       base_info_list: newNodeForm.value.base_info_list?.filter(info => info.host || info.port) || [],
       link: selectedDiagram.value,
       position_x: Math.round(position_x),
-      position_y: Math.round(position_y)
+      position_y: Math.round(position_y),
+      remarks: newNodeForm.value.remarks
     })
 
     // 刷新数据
@@ -578,6 +598,7 @@ const updateNodeInfo = async () => {
     await nodeApi.updateNode({
       uuid: selectedNode.value.id,
       name: selectedNode.value.name,
+      remarks: selectedNode.value.remarks,
       base_info_list: baseInfoList?.filter((info: any) => info.host || info.port) || []
     })
     
