@@ -450,6 +450,8 @@ class NodeView(View):
                     host = base_info_item.get('host')
                     if host:
                         port = base_info_item.get('port')
+                        if type(port) == str and port == "":
+                            port = None
                         is_ping_disabled = base_info_item.get('is_ping_disabled', False)
                         remarks = base_info_item.get('remarks', '')
                         
