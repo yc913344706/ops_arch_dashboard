@@ -216,12 +216,6 @@ class NodeConnection(BaseModel):
     """
     节点连接模型 - 定义节点之间的连接关系
     """
-    # DIRECTIONS = [
-    #     ('up', '上'),
-    #     ('down', '下'),
-    #     ('left', '左'),
-    #     ('right', '右'),
-    # ]
 
     from_node = models.ForeignKey(
         Node,
@@ -235,11 +229,6 @@ class NodeConnection(BaseModel):
         related_name='incoming_connections',
         verbose_name='目标节点'
     )
-    # direction = models.CharField(
-    #     max_length=10,
-    #     choices=DIRECTIONS,
-    #     verbose_name='连接方向'
-    # )
     link = models.ForeignKey(
         Link,
         on_delete=models.CASCADE,
@@ -253,7 +242,6 @@ class NodeConnection(BaseModel):
         unique_together = [['from_node', 'to_node', 'link', 'is_del']]  # 确保同一架构图内两个节点间只有一个连接
 
     def __str__(self):
-        # return f"{self.from_node.name} -> {self.to_node.name} ({self.direction})"
         return f"{self.from_node.name} -> {self.to_node.name}"
 
 

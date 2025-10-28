@@ -529,7 +529,7 @@ class NodeView(View):
             
             node = Node.objects.filter(uuid=body['uuid']).first()
             assert node, '删除的节点不存在'
-            node.delete()
+            node.real_delete()
             return pub_success_response()
         except Exception as e:
             color_logger.error(f"删除节点失败: {e.args}")
