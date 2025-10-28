@@ -98,9 +98,10 @@
                                 备注
                               </el-button>
                             </template>
-                            <div>
+                            <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop>
                               <el-input
-                                v-model="info.remarks"
+                                :model-value="info._temp_remarks !== undefined ? info._temp_remarks : info.remarks"
+                                @update:model-value="updateRemarkValue(info, $event)"
                                 type="textarea"
                                 :rows="3"
                                 placeholder="请输入备注"
@@ -125,9 +126,10 @@
                               备注
                             </el-button>
                           </template>
-                          <div>
+                          <div @click.stop @mousedown.stop @mouseup.stop @focus.stop @blur.stop>
                             <el-input
-                              v-model="info.remarks"
+                              :model-value="info._temp_remarks !== undefined ? info._temp_remarks : info.remarks"
+                              @update:model-value="updateRemarkValue(info, $event)"
                               type="textarea"
                               :rows="3"
                               placeholder="请输入备注"
@@ -781,6 +783,13 @@ const updateConnectionTarget = async (connectionId: string, newTargetNodeId: str
   }
 }
 
+// 记录事件的日志函数
+const updateRemarkValue = (info: any, value: string) => {
+  // 不直接修改响应式对象，而是临时保存在局部变量中
+  // 真正的保存操作在点击"保存"按钮时进行
+  info._temp_remarks = value  // 使用临时字段保存修改的值
+}
+
 // 更新基础信息服务的备注
 const updateBasicInfoRemark = async (info: any) => {
   if (!info.uuid) {
@@ -788,11 +797,18 @@ const updateBasicInfoRemark = async (info: any) => {
     return
   }
   
+  // 使用临时值（如果存在）或原始值
+  const remarksToSave = info._temp_remarks !== undefined ? info._temp_remarks : info.remarks
+  
   try {
     await baseInfoApi.updateBaseInfo({
       uuid: info.uuid,
-      remarks: info.remarks
+      remarks: remarksToSave
     })
+    
+    // 更新实际值并清除临时值
+    info.remarks = remarksToSave
+    delete info._temp_remarks
     
     ElMessage.success('备注更新成功')
   } catch (error) {
